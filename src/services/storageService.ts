@@ -1067,35 +1067,56 @@ export class StorageService {
   }
 }
 
-// Export singleton instance
-const storageService = new StorageService()
+// ── Drive-backed singleton ────────────────────────────────────────────────────
+// All exported functions delegate to DriveStorageService.
+// Call initializeDriveStorage(accessToken) after the user signs in.
+// Call clearDriveStorage() on sign-out.
 
-export const getAccounts = () => storageService.getAccounts()
-export const getAccount = (id: string) => storageService.getAccount(id)
-export const saveAccount = (account: Account) =>
-  storageService.saveAccount(account)
-export const deleteAccount = (id: string) => storageService.deleteAccount(id)
-export const getTransactions = () => storageService.getTransactions()
-export const getTransaction = (id: string) => storageService.getTransaction(id)
+import { DriveStorageService } from './driveStorageService'
+
+let _drive: DriveStorageService | null = null
+
+export function initializeDriveStorage(): void {
+  // The access token is now managed server-side via HTTP-only cookie.
+  // Just create the singleton if it doesn't already exist.
+  if (!_drive) {
+    _drive = new DriveStorageService()
+  }
+}
+
+export function clearDriveStorage(): void {
+  _drive = null
+}
+
+function svc(): DriveStorageService {
+  if (!_drive) throw new Error('Not authenticated. Please sign in.')
+  console.log('Using DriveStorageService instance:', _drive)
+  return _drive
+}
+
+export const getAccounts = () => svc().getAccounts()
+export const getAccount = (id: string) => svc().getAccount(id)
+export const saveAccount = (account: Account) => svc().saveAccount(account)
+export const deleteAccount = (id: string) => svc().deleteAccount(id)
+export const getTransactions = () => svc().getTransactions()
+export const getTransaction = (id: string) => svc().getTransaction(id)
 export const saveTransaction = (transaction: Transaction) =>
-  storageService.saveTransaction(transaction)
-export const deleteTransaction = (id: string) =>
-  storageService.deleteTransaction(id)
-export const getRecurringTransactions = () =>
-  storageService.getRecurringTransactions()
+  svc().saveTransaction(transaction)
+export const deleteTransaction = (id: string) => svc().deleteTransaction(id)
+export const getRecurringTransactions = () => svc().getRecurringTransactions()
 export const getRecurringTransaction = (id: string) =>
-  storageService.getRecurringTransaction(id)
+  svc().getRecurringTransaction(id)
 export const saveRecurringTransaction = (recurring: RecurringTransaction) =>
-  storageService.saveRecurringTransaction(recurring)
+  svc().saveRecurringTransaction(recurring)
 export const deleteRecurringTransaction = (id: string) =>
-  storageService.deleteRecurringTransaction(id)
-export const getNetWorthSnapshots = () => storageService.getNetWorthSnapshots()
+  svc().deleteRecurringTransaction(id)
+export const getNetWorthSnapshots = () => svc().getNetWorthSnapshots()
 export const saveNetWorthSnapshot = (snapshot: NetWorthSnapshot) =>
-  storageService.saveNetWorthSnapshot(snapshot)
+  svc().saveNetWorthSnapshot(snapshot)
 export const getInvestmentSnapshots = (accountId?: string) =>
-  storageService.getInvestmentSnapshots(accountId)
+  svc().getInvestmentSnapshots(accountId)
 export const saveInvestmentSnapshot = (snapshot: InvestmentSnapshot) =>
-  storageService.saveInvestmentSnapshot(snapshot)
-export const exportData = () => storageService.exportData()
-export const importData = (data: ExportData) => storageService.importData(data)
-export const clearAllData = () => storageService.clearAllData()
+  svc().saveInvestmentSnapshot(snapshot)
+export const exportData = () => svc().exportData()
+export const importData = (data: ExportData) => svc().importData(data)
+export const clearAllData = () => svc().clearAllData()

@@ -1,3 +1,5 @@
+'use client'
+
 import React from 'react'
 import { Input, Select, Button } from '@/components/common'
 import TransactionCard from './TransactionCard'

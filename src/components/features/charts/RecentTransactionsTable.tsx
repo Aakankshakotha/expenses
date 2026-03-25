@@ -1,3 +1,5 @@
+'use client'
+
 import React from 'react'
 import type { TransactionWithAccounts } from '@/types/transaction'
 import { formatCurrency } from '@/utils/currencyUtils'
@@ -13,7 +15,7 @@ import TableCell from '@mui/material/TableCell'
 import Chip from '@mui/material/Chip'
 import Button from '@mui/material/Button'
 import FilterListIcon from '@mui/icons-material/FilterList'
-import { useNavigate } from 'react-router-dom'
+import { useRouter } from 'next/navigation'
 
 interface RecentTransactionsTableProps {
   transactions: TransactionWithAccounts[]
@@ -23,7 +25,7 @@ interface RecentTransactionsTableProps {
 export const RecentTransactionsTable: React.FC<
   RecentTransactionsTableProps
 > = ({ transactions, limit = 5 }) => {
-  const navigate = useNavigate()
+  const router = useRouter()
   const recentTransactions = transactions
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, limit)
@@ -183,7 +185,7 @@ export const RecentTransactionsTable: React.FC<
                     <Button
                       variant="contained"
                       size="small"
-                      onClick={() => navigate('/transactions')}
+                      onClick={() => router.push('/transactions')}
                       sx={{
                         mt: '0.25rem',
                         textTransform: 'none',
@@ -282,7 +284,7 @@ export const RecentTransactionsTable: React.FC<
           <Button
             variant="outlined"
             className="view-all-btn"
-            onClick={() => navigate('/transactions')}
+            onClick={() => router.push('/transactions')}
             sx={{
               textTransform: 'none',
               borderColor: 'divider',

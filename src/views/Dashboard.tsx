@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useMemo, useState } from 'react'
 import {
   CashFlowTrendChart,
@@ -13,7 +15,7 @@ import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
 import MuiButton from '@mui/material/Button'
 import { useTheme, alpha } from '@mui/material/styles'
-import { useNavigate } from 'react-router-dom'
+import { useRouter } from 'next/navigation'
 
 type Period = '1m' | '1y' | 'all'
 
@@ -35,7 +37,7 @@ const Dashboard: React.FC = () => {
     thisMonthLiabilityDelta,
   } = metrics
   const muiTheme = useTheme()
-  const navigate = useNavigate()
+  const router = useRouter()
   const [period, setPeriod] = useState<Period>('1m')
 
   const filteredTransactions = useMemo(() => {
@@ -214,7 +216,7 @@ const Dashboard: React.FC = () => {
               <MuiButton
                 variant="contained"
                 size="small"
-                onClick={() => navigate(step.route)}
+                onClick={() => router.push(step.route)}
                 sx={{
                   alignSelf: 'flex-start',
                   textTransform: 'none',
@@ -231,7 +233,7 @@ const Dashboard: React.FC = () => {
         <MuiButton
           variant="outlined"
           size="large"
-          onClick={() => navigate('/accounts')}
+          onClick={() => router.push('/accounts')}
           sx={{
             textTransform: 'none',
             borderRadius: '10px',
@@ -296,7 +298,7 @@ const Dashboard: React.FC = () => {
             <MuiButton
               color="inherit"
               size="small"
-              onClick={() => navigate('/transactions')}
+              onClick={() => router.push('/transactions')}
               sx={{
                 textTransform: 'none',
                 fontWeight: 600,

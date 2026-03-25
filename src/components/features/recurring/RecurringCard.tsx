@@ -1,3 +1,5 @@
+'use client'
+
 import React from 'react'
 import { Card, Button } from '@/components/common'
 import { formatCurrency } from '@/utils/currencyUtils'
@@ -34,15 +36,6 @@ const RecurringCard: React.FC<RecurringCardProps> = ({
 }) => {
   const frequencyLabel =
     FREQUENCY_LABELS[recurring.frequency] || recurring.frequency
-
-  const statusColors: Record<string, { bg: string; color: string }> = {
-    active: { bg: 'success.light', color: 'success.main' },
-    paused: { bg: 'warning.light', color: 'warning.main' },
-  }
-  const statusColor = statusColors[recurring.status] ?? {
-    bg: 'action.selected',
-    color: 'text.secondary',
-  }
 
   return (
     <Card

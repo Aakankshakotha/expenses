@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useState, useEffect } from 'react'
 import { Modal, Button, Input, Select } from '@/components/common'
 import { formatCurrency } from '@/utils/currencyUtils'

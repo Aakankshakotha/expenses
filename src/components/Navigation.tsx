@@ -1,5 +1,8 @@
+'use client'
+
 import React from 'react'
-import { NavLink } from 'react-router-dom'
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { useTheme } from '@/contexts/ThemeContext'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
@@ -7,12 +10,21 @@ import IconButton from '@mui/material/IconButton'
 import LightModeIcon from '@mui/icons-material/LightMode'
 import DarkModeIcon from '@mui/icons-material/DarkMode'
 
+const NAV_LINKS = [
+  { href: '/', label: 'Dashboard', exact: true },
+  { href: '/accounts', label: 'Accounts', exact: false },
+  { href: '/transactions', label: 'Transactions', exact: false },
+  { href: '/recurring', label: 'Recurring', exact: false },
+  { href: '/investments', label: 'Investments', exact: false },
+]
+
 /**
  * Main navigation component
  * Provides links to all primary pages
  */
 const Navigation: React.FC = () => {
   const { theme, toggleTheme } = useTheme()
+  const pathname = usePathname()
 
   return (
     <Box
@@ -71,47 +83,16 @@ const Navigation: React.FC = () => {
           '& li': { m: 0 },
         }}
       >
-        <Box component="li">
-          <NavLink
-            to="/"
-            className={({ isActive }) => (isActive ? 'active' : '')}
-            end
-          >
-            Dashboard
-          </NavLink>
-        </Box>
-        <Box component="li">
-          <NavLink
-            to="/accounts"
-            className={({ isActive }) => (isActive ? 'active' : '')}
-          >
-            Accounts
-          </NavLink>
-        </Box>
-        <Box component="li">
-          <NavLink
-            to="/transactions"
-            className={({ isActive }) => (isActive ? 'active' : '')}
-          >
-            Transactions
-          </NavLink>
-        </Box>
-        <Box component="li">
-          <NavLink
-            to="/recurring"
-            className={({ isActive }) => (isActive ? 'active' : '')}
-          >
-            Recurring
-          </NavLink>
-        </Box>
-        <Box component="li">
-          <NavLink
-            to="/investments"
-            className={({ isActive }) => (isActive ? 'active' : '')}
-          >
-            Investments
-          </NavLink>
-        </Box>
+        {NAV_LINKS.map(({ href, label, exact }) => {
+          const isActive = exact ? pathname === href : pathname.startsWith(href)
+          return (
+            <Box component="li" key={href}>
+              <Link href={href} className={isActive ? 'active' : ''}>
+                {label}
+              </Link>
+            </Box>
+          )
+        })}
       </Box>
       <IconButton
         onClick={toggleTheme}
@@ -142,3 +123,4 @@ const Navigation: React.FC = () => {
 }
 
 export default Navigation
+

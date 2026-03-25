@@ -1,3 +1,5 @@
+'use client'
+
 import type { ReactNode } from 'react'
 import { useId } from 'react'
 import Dialog from '@mui/material/Dialog'

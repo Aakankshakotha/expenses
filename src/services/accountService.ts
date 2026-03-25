@@ -51,7 +51,8 @@ export async function createAccount(
       success: false,
       error: {
         field: 'unknown',
-        message: 'Failed to check existing accounts',
+        message:
+          accountsResult.error.message || 'Failed to check existing accounts',
         code: 'STORAGE_ERROR',
       },
     }
@@ -170,7 +171,8 @@ export async function updateAccount(
       success: false,
       error: {
         field: 'unknown',
-        message: 'Failed to check existing accounts',
+        message:
+          accountsResult.error.message || 'Failed to check existing accounts',
         code: 'STORAGE_ERROR',
       },
     }

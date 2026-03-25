@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useMemo } from 'react'
 import { StatCard } from '@/components/common'
 import type { TransactionWithAccounts } from '@/types/transaction'

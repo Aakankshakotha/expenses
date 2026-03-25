@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/common'
 import { RecurringForm, RecurringList } from '@/components/features'

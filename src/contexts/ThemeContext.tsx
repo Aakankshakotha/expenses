@@ -1,3 +1,5 @@
+'use client'
+
 import React, { createContext, useContext, useState, useEffect } from 'react'
 
 type Theme = 'light' | 'dark'
@@ -13,9 +15,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [theme, setTheme] = useState<Theme>(() => {
-    // Check localStorage for saved theme preference
-    const savedTheme = localStorage.getItem('theme') as Theme
-    return savedTheme || 'light'
+    // Guard for SSR — localStorage is only available in the browser
+    if (typeof window === 'undefined') return 'light'
+    return (localStorage.getItem('theme') as Theme) || 'light'
   })
 
   useEffect(() => {

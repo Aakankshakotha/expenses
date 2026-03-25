@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useMemo, useState } from 'react'
 import ReactECharts from 'echarts-for-react'
 import type { Transaction } from '@/types/transaction'

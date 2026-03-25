@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useMemo, useState } from 'react'
 import {
   AreaChart,
@@ -685,12 +687,14 @@ const CashFlowTrendChart: React.FC<CashFlowTrendChartProps> = ({
           <ResponsiveContainer width="100%" height={360}>
             <AreaChart
               data={chartData}
-              onClick={(data) => {
-                const ap = data?.activePayload as
-                  | Array<{ payload?: { key?: string } }>
-                  | undefined
-                const key = ap?.[0]?.payload?.key
-                if (key) handleBarClick({ key })
+              onClick={(nextState) => {
+                // Recharts v3: use activeTooltipIndex to resolve the clicked data point
+                const idx =
+                  typeof nextState.activeTooltipIndex === 'number'
+                    ? nextState.activeTooltipIndex
+                    : -1
+                const item = idx >= 0 ? chartData[idx] : undefined
+                if (item?.key) handleBarClick({ key: item.key })
               }}
               style={{ cursor: 'pointer', outline: 'none' }}
             >

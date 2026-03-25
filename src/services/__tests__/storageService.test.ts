@@ -545,7 +545,7 @@ describe('StorageService', () => {
           netWorthSnapshots: [],
         }
 
-        const result = await storageService.importData(invalidData as any)
+        const result = await storageService.importData(invalidData as Parameters<typeof storageService.importData>[0])
 
         expect(result.success).toBe(false)
         if (!result.success) {

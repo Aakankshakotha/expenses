@@ -66,29 +66,29 @@ describe('currencyUtils', () => {
 
   describe('formatCurrency', () => {
     it('formats positive amounts correctly', () => {
-      expect(formatCurrency(1000)).toBe('$10.00')
-      expect(formatCurrency(1050)).toBe('$10.50')
-      expect(formatCurrency(123)).toBe('$1.23')
-      expect(formatCurrency(1)).toBe('$0.01')
-      expect(formatCurrency(0)).toBe('$0.00')
+      expect(formatCurrency(1000)).toBe('₹10.00')
+      expect(formatCurrency(1050)).toBe('₹10.50')
+      expect(formatCurrency(123)).toBe('₹1.23')
+      expect(formatCurrency(1)).toBe('₹0.01')
+      expect(formatCurrency(0)).toBe('₹0.00')
     })
 
     it('formats negative amounts correctly', () => {
-      expect(formatCurrency(-1000)).toBe('-$10.00')
-      expect(formatCurrency(-1050)).toBe('-$10.50')
-      expect(formatCurrency(-1)).toBe('-$0.01')
+      expect(formatCurrency(-1000)).toBe('-₹10.00')
+      expect(formatCurrency(-1050)).toBe('-₹10.50')
+      expect(formatCurrency(-1)).toBe('-₹0.01')
     })
 
     it('formats large amounts with commas', () => {
-      expect(formatCurrency(100000)).toBe('$1,000.00')
-      expect(formatCurrency(100000099)).toBe('$1,000,000.99')
-      expect(formatCurrency(123456789)).toBe('$1,234,567.89')
+      expect(formatCurrency(100000)).toBe('₹1,000.00')
+      expect(formatCurrency(100000099)).toBe('₹10,00,000.99')
+      expect(formatCurrency(123456789)).toBe('₹12,34,567.89')
     })
 
     it('always shows two decimal places', () => {
-      expect(formatCurrency(100)).toBe('$1.00')
-      expect(formatCurrency(1050)).toBe('$10.50')
-      expect(formatCurrency(10500)).toBe('$105.00')
+      expect(formatCurrency(100)).toBe('₹1.00')
+      expect(formatCurrency(1050)).toBe('₹10.50')
+      expect(formatCurrency(10500)).toBe('₹105.00')
     })
   })
 

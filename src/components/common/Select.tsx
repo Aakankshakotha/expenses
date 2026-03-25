@@ -1,3 +1,5 @@
+'use client'
+
 import { SelectHTMLAttributes, useId, type FocusEvent } from 'react'
 import Box from '@mui/material/Box'
 import FormControl from '@mui/material/FormControl'
@@ -37,6 +39,7 @@ export function Select({
   onBlur,
   onFocus,
   value,
+  ...rest
 }: SelectProps): JSX.Element {
   const generatedId = useId()
   const selectId = id || generatedId
@@ -70,6 +73,7 @@ export function Select({
           inputProps={{
             className: error ? 'select-error' : undefined,
             'aria-label': label || placeholder || 'Select',
+            ...rest,
           }}
         >
           <option value="" disabled>

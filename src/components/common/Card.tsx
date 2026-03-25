@@ -1,3 +1,5 @@
+'use client'
+
 import type { HTMLAttributes, ReactNode } from 'react'
 import type { SxProps, Theme } from '@mui/material/styles'
 import Paper from '@mui/material/Paper'
@@ -25,11 +27,20 @@ export function Card({
   className = '',
   ...rest
 }: CardProps) {
+  const rootClass = [
+    'card',
+    hoverable ? 'card-hoverable' : '',
+    noPadding ? 'card-no-padding' : '',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ')
+
   return (
     <Paper
       component="article"
       elevation={0}
-      className={className || undefined}
+      className={rootClass || undefined}
       sx={[
         {
           border: '1px solid',
@@ -52,6 +63,7 @@ export function Card({
     >
       {title && (
         <Box
+          className="card-header"
           sx={{
             px: 3,
             py: 2,
@@ -76,9 +88,12 @@ export function Card({
           )}
         </Box>
       )}
-      <Box sx={{ p: noPadding ? 0 : 3 }}>{children}</Box>
+      <Box className="card-body" sx={{ p: noPadding ? 0 : 3 }}>
+        {children}
+      </Box>
       {footer && (
         <Box
+          className="card-footer"
           sx={{
             px: 3,
             py: 2,

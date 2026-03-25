@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useMemo } from 'react'
 import { Input, Select } from '@/components/common'
 import RecurringCard from './RecurringCard'
