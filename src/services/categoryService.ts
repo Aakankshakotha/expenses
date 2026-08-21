@@ -4,6 +4,7 @@
  */
 
 import type { TransactionCategory } from '../types/transaction'
+import * as storageService from './storageService'
 
 /**
  * Predefined transaction categories
@@ -330,4 +331,112 @@ export const categoryService = {
     const category = this.getCategoryById(id)
     return category ? category.icon || '📌' : '📌'
   },
+}
+
+// ── User-defined category CRUD (async, stored in Drive) ───────────────────────
+
+function uuid(): string {
+  return crypto.randomUUID()
+}
+
+export interface CreateCategoryDto {
+  name: string
+  group: TransactionCategory['group']
+  color: string
+  icon?: string
+}
+
+export interface UpdateCategoryDto {
+  name?: string
+  group?: TransactionCategory['group']
+  color?: string
+  icon?: string
+}
+
+/**
+ * Get only user-created categories from storage
+ */
+export async function listUserCategories(): Promise<TransactionCategory[]> {
+  const result = await storageService.getCategories()
+  return result.success ? result.data : []
+}
+
+/**
+ * Get all categories: built-in + user-defined
+ * User categories override built-in ones with the same ID
+ */
+export async function listAllCategories(): Promise<TransactionCategory[]> {
+  const userCats = await listUserCategories()
+  const userIds = new Set(userCats.map((c) => c.id))
+  const builtIn = CATEGORIES.filter((c) => !userIds.has(c.id))
+  return [...builtIn, ...userCats]
+}
+
+/**
+ * Look up a category by ID across built-in and user categories
+ */
+export async function findCategoryById(
+  id: string
+): Promise<TransactionCategory | undefined> {
+  const all = await listAllCategories()
+  return all.find((c) => c.id === id)
+}
+
+/**
+ * Create a new user-defined category
+ */
+export async function createUserCategory(
+  dto: CreateCategoryDto
+): Promise<TransactionCategory> {
+  const category: TransactionCategory = {
+    id: `custom-${uuid()}`,
+    name: dto.name.trim(),
+    group: dto.group,
+    color: dto.color,
+    icon: dto.icon?.trim() || '📌',
+    isCustom: true,
+  }
+  const result = await storageService.saveCategory(category)
+  if (!result.success) throw new Error(result.error.message)
+  return result.data
+}
+
+/**
+ * Update an existing category.
+ * Built-in categories are updated via persisted overrides with the same ID.
+ */
+export async function updateUserCategory(
+  id: string,
+  dto: UpdateCategoryDto
+): Promise<TransactionCategory> {
+  const userCats = await listUserCategories()
+  const existingUser = userCats.find((c) => c.id === id)
+  const existingBuiltIn = CATEGORIES.find((c) => c.id === id)
+  const existing = existingUser ?? existingBuiltIn
+
+  if (!existing) throw new Error('Category not found')
+
+  const nextName = dto.name !== undefined ? dto.name.trim() : existing.name
+  if (!nextName) throw new Error('Category name is required')
+
+  const updated: TransactionCategory = {
+    ...existing,
+    name: nextName,
+    ...(dto.group !== undefined && { group: dto.group }),
+    ...(dto.color !== undefined && { color: dto.color }),
+    ...(dto.icon !== undefined && { icon: dto.icon.trim() || '📌' }),
+    // Keep true only for explicitly user-created categories.
+    isCustom: existing.isCustom === true,
+  }
+  const result = await storageService.saveCategory(updated)
+  if (!result.success) throw new Error(result.error.message)
+  return result.data
+}
+
+/**
+ * Delete a user-defined category
+ */
+export async function deleteUserCategory(id: string): Promise<void> {
+  const result = await storageService.deleteCategory(id)
+  if (!result.success) throw new Error(result.error.message)
 }

@@ -1,11 +1,13 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useMemo } from 'react'
 import {
   CashFlowTrendChart,
   MoneyFlowChart,
   ExpensesChart,
-  RecentTransactionsTable,
+  MonthlyCashflowBarChart,
+  BudgetProgress,
+  RecentTransactionsList,
 } from '@/components/features'
 import { MetricCard } from '@/components/common'
 import { useDashboardData } from '@/hooks/useDashboardData'
@@ -17,80 +19,39 @@ import MuiButton from '@mui/material/Button'
 import { useTheme, alpha } from '@mui/material/styles'
 import { useRouter } from 'next/navigation'
 
-type Period = '1m' | '1y' | 'all'
-
-const PERIOD_LABELS: Record<Period, string> = {
-  '1m': 'Month',
-  '1y': 'Year',
-  all: 'All',
-}
-
 const Dashboard: React.FC = () => {
   const { accounts, transactions, metrics, loading, error } = useDashboardData()
-  const {
-    netWorth,
-    totalAssets,
-    totalLiabilities,
-    cashFlow,
-    lastMonthCashFlow,
-    thisMonthAssetDelta,
-    thisMonthLiabilityDelta,
-  } = metrics
+  const { netWorth, totalAssets, income, expenses, cashFlow } = metrics
   const muiTheme = useTheme()
   const router = useRouter()
-  const [period, setPeriod] = useState<Period>('1m')
 
-  const filteredTransactions = useMemo(() => {
+  // This month's transactions for charts
+  const thisMonthTransactions = useMemo(() => {
     const now = new Date()
-    if (period === '1m') {
-      return transactions.filter((t) => {
-        const d = new Date(t.date)
-        return (
-          d.getFullYear() === now.getFullYear() &&
-          d.getMonth() === now.getMonth()
-        )
-      })
-    }
-    if (period === '1y') {
-      return transactions.filter(
-        (t) => new Date(t.date).getFullYear() === now.getFullYear()
-      )
-    }
-    return transactions
-  }, [transactions, period])
-
-  const trendPeriodMonths = useMemo(() => {
-    if (period === '1m') return 1
-    if (period === '1y') return 12
-    if (transactions.length === 0) return 6
-    const earliest = transactions.reduce((min, t) => {
+    return transactions.filter((t) => {
       const d = new Date(t.date)
-      return d < min ? d : min
-    }, new Date())
-    const now = new Date()
-    return Math.max(
-      1,
-      (now.getFullYear() - earliest.getFullYear()) * 12 +
-        now.getMonth() -
-        earliest.getMonth() +
-        1
-    )
-  }, [period, transactions])
+      return (
+        d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+      )
+    })
+  }, [transactions])
+
+  const thisMonthCount = thisMonthTransactions.length
 
   if (loading) {
     return (
       <Box
         sx={{
-          padding: '2rem',
-          maxWidth: '1400px',
-          margin: '0 auto',
+          minHeight: '60vh',
           display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
+          justifyContent: 'center',
           gap: 2,
         }}
       >
-        <CircularProgress size={20} />
-        <Typography>Loading dashboard...</Typography>
+        <CircularProgress />
+        <Typography color="text.secondary">Loading dashboard...</Typography>
       </Box>
     )
   }
@@ -249,38 +210,24 @@ const Dashboard: React.FC = () => {
 
   return (
     <Box sx={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: '2rem',
-          width: '100%',
-        }}
-      >
-        <Box>
-          <Typography
-            component="h1"
-            sx={{
-              fontSize: '1.8rem',
-              fontWeight: 700,
-              m: 0,
-              color: 'text.primary',
-            }}
-          >
-            Financial Overview
-          </Typography>
-          <Typography
-            component="p"
-            sx={{
-              fontSize: '0.875rem',
-              color: 'text.secondary',
-              m: '0.35rem 0 0',
-            }}
-          >
-            Current balances &amp; activity at a glance
-          </Typography>
-        </Box>
+      {/* ── Page header ── */}
+      <Box sx={{ mb: '2rem' }}>
+        <Typography
+          component="h1"
+          sx={{
+            fontSize: '1.8rem',
+            fontWeight: 700,
+            color: 'text.primary',
+            m: 0,
+          }}
+        >
+          Dashboard
+        </Typography>
+        <Typography
+          sx={{ fontSize: '0.875rem', color: 'text.secondary', mt: '0.25rem' }}
+        >
+          Financial overview for this month
+        </Typography>
       </Box>
 
       {error && (
@@ -289,209 +236,87 @@ const Dashboard: React.FC = () => {
         </Alert>
       )}
 
-      {/* No-data banner for the selected period */}
-      {filteredTransactions.length === 0 && transactions.length > 0 && (
-        <Alert
-          severity="info"
-          sx={{ mb: 2, borderRadius: '12px', alignItems: 'center' }}
-          action={
-            <MuiButton
-              color="inherit"
-              size="small"
-              onClick={() => router.push('/transactions')}
-              sx={{
-                textTransform: 'none',
-                fontWeight: 600,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              Add Transaction
-            </MuiButton>
-          }
-        >
-          No transactions found for{' '}
-          {period === '1m'
-            ? new Date().toLocaleDateString('en-US', {
-                month: 'long',
-                year: 'numeric',
-              })
-            : period === '1y'
-              ? new Date().getFullYear()
-              : 'this period'}
-          . Charts will appear once you record a transaction.
-        </Alert>
-      )}
-
+      {/* ── Row 1: Metric cards ── */}
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-          gap: '1.5rem',
-          mb: '2rem',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: '1.25rem',
+          mb: '1.75rem',
         }}
       >
         <MetricCard
           title="Net Worth"
           value={netWorth}
-          icon={<Box component="span">💎</Box>}
-          color="blue"
-          trend={{
-            value: cashFlow,
-            direction: cashFlow >= 0 ? 'up' : 'down',
-            period: 'this month',
-          }}
+          subtitle={`Assets: ${new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(totalAssets)}`}
         />
         <MetricCard
-          title="Total Assets"
-          value={totalAssets}
-          icon={<Box component="span">💰</Box>}
-          color="green"
-          trend={{
-            value: thisMonthAssetDelta,
-            direction: thisMonthAssetDelta >= 0 ? 'up' : 'down',
-            period: 'this month',
-          }}
+          title="Monthly Income"
+          value={income}
+          valueColor={muiTheme.palette.success.main}
         />
         <MetricCard
-          title="Liabilities"
-          value={totalLiabilities}
-          icon={<Box component="span">📉</Box>}
-          color="pink"
-          trend={{
-            value: thisMonthLiabilityDelta,
-            direction: thisMonthLiabilityDelta <= 0 ? 'down' : 'up',
-            period: 'this month',
-          }}
+          title="Monthly Expenses"
+          value={expenses}
+          valueColor={muiTheme.palette.error.main}
         />
         <MetricCard
-          title="Cash Flow"
+          title="Monthly Savings"
           value={cashFlow}
-          icon={<Box component="span">📊</Box>}
-          color="purple"
-          trend={{
-            value: cashFlow - lastMonthCashFlow,
-            direction: cashFlow >= lastMonthCashFlow ? 'up' : 'down',
-            period: 'vs last month',
-          }}
+          valueColor={
+            cashFlow >= 0
+              ? muiTheme.palette.success.main
+              : muiTheme.palette.error.main
+          }
+          subtitle={`${thisMonthCount} transaction${thisMonthCount !== 1 ? 's' : ''}`}
         />
       </Box>
 
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          mb: '1.25rem',
-        }}
-      >
-        <Box>
-          <Typography
-            sx={{
-              fontWeight: 700,
-              fontSize: '1rem',
-              color: 'text.primary',
-              m: 0,
-            }}
-          >
-            Activity Charts
-          </Typography>
-          <Typography
-            sx={{ fontSize: '0.8rem', color: 'text.secondary', m: '2px 0 0' }}
-          >
-            {period === '1m'
-              ? new Date().toLocaleDateString('en-US', {
-                  month: 'long',
-                  year: 'numeric',
-                })
-              : period === '1y'
-                ? `Jan – Dec ${new Date().getFullYear()}`
-                : 'All time'}
-          </Typography>
-        </Box>
-        {/* Period pill selector */}
-        <Box
-          sx={{
-            display: 'inline-flex',
-            backgroundColor: alpha(muiTheme.palette.text.primary, 0.06),
-            borderRadius: '12px',
-            p: '4px',
-            gap: '2px',
-          }}
-        >
-          {(Object.keys(PERIOD_LABELS) as Period[]).map((p) => (
-            <Box
-              key={p}
-              component="button"
-              onClick={() => setPeriod(p)}
-              sx={{
-                border: 'none',
-                cursor: 'pointer',
-                px: 2.5,
-                py: 1,
-                borderRadius: '9px',
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                transition: 'all 0.18s ease',
-                backgroundColor:
-                  period === p ? 'background.paper' : 'transparent',
-                color: period === p ? 'text.primary' : 'text.secondary',
-                boxShadow: period === p ? '0 1px 4px rgba(0,0,0,0.14)' : 'none',
-              }}
-            >
-              {PERIOD_LABELS[p]}
-            </Box>
-          ))}
-        </Box>
+      {/* ── Row 2: Money Flow (full width) ── */}
+      <Box sx={{ mb: '1.75rem' }}>
+        <MoneyFlowChart
+          transactions={thisMonthTransactions}
+          accounts={accounts}
+        />
       </Box>
 
+      {/* ── Row 3: Monthly Cashflow bar + Spending by Category ── */}
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.65fr) minmax(0, 1fr)',
-          gap: '1.5rem',
-          mb: '2rem',
+          gridTemplateColumns: 'minmax(0, 1.5fr) minmax(0, 1fr)',
+          gap: '1.25rem',
+          mb: '1.75rem',
+        }}
+      >
+        <MonthlyCashflowBarChart
+          transactions={transactions}
+          accounts={accounts}
+          periodMonths={6}
+        />
+        <ExpensesChart
+          transactions={thisMonthTransactions}
+          accounts={accounts}
+        />
+      </Box>
+
+      {/* ── Row 4: Income vs Expenses Trend (full width) ── */}
+      <Box sx={{ mb: '1.75rem' }}>
+        <CashFlowTrendChart transactions={transactions} accounts={accounts} />
+      </Box>
+
+      {/* ── Row 5: Budget Progress + Recent Transactions ── */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.4fr)',
+          gap: '1.25rem',
+          mb: '1.75rem',
           alignItems: 'stretch',
         }}
       >
-        <Box
-          sx={{
-            minHeight: '470px',
-            display: 'flex',
-            '& > *': { width: '100%', height: '100%' },
-          }}
-        >
-          <MoneyFlowChart
-            transactions={filteredTransactions}
-            accounts={accounts}
-          />
-        </Box>
-        <Box
-          sx={{
-            minHeight: '470px',
-            display: 'flex',
-            '& > *': { width: '100%', height: '100%' },
-          }}
-        >
-          <ExpensesChart
-            transactions={filteredTransactions}
-            accounts={accounts}
-          />
-        </Box>
-      </Box>
-
-      <Box sx={{ width: '100%', mb: '2rem' }}>
-        <CashFlowTrendChart
-          transactions={filteredTransactions}
-          accounts={accounts}
-          periodMonths={trendPeriodMonths}
-        />
-      </Box>
-
-      <Box sx={{ width: '100%', mb: '2rem' }}>
-        <RecentTransactionsTable
-          transactions={filteredTransactions}
-          limit={5}
-        />
+        <BudgetProgress />
+        <RecentTransactionsList transactions={transactions} limit={8} />
       </Box>
     </Box>
   )

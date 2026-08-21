@@ -59,11 +59,11 @@ function AppShell({ children }: { children: React.ReactNode }) {
       sx={{
         minHeight: '100vh',
         display: 'flex',
-        flexDirection: 'column',
+        flexDirection: 'row',
       }}
     >
       <Navigation />
-      <Box component="main" sx={{ flex: 1, width: '100%', minWidth: 0 }}>
+      <Box component="main" sx={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
         {children}
       </Box>
     </Box>

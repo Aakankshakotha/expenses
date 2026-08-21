@@ -150,16 +150,18 @@ const Recurring: React.FC = () => {
     return (
       <Box
         sx={{
-          padding: '2rem',
-          maxWidth: '1400px',
-          margin: '0 auto',
+          minHeight: '60vh',
           display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
+          justifyContent: 'center',
           gap: 2,
         }}
       >
-        <CircularProgress size={20} />
-        <Typography>Loading recurring transactions...</Typography>
+        <CircularProgress />
+        <Typography color="text.secondary">
+          Loading recurring transactions...
+        </Typography>
       </Box>
     )
   }

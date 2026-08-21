@@ -22,6 +22,7 @@ export interface TransactionCategory {
     | 'other'
   color: string
   icon?: string
+  isCustom?: boolean // true for user-defined categories
 }
 
 /**
@@ -68,6 +69,10 @@ export interface CreateTransactionDto {
 export interface UpdateTransactionDto {
   description?: string
   date?: string
+  category?: string
+  tags?: string[]
+  fromAccountId?: string
+  toAccountId?: string
 }
 
 /**

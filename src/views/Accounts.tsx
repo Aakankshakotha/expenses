@@ -1,45 +1,35 @@
 'use client'
 
-import React from 'react'
-import FormControl from '@mui/material/FormControl'
-import InputLabel from '@mui/material/InputLabel'
-import MuiSelect from '@mui/material/Select'
-import MenuItem from '@mui/material/MenuItem'
+import React, { useState, useMemo } from 'react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
+import MuiButton from '@mui/material/Button'
+import AddIcon from '@mui/icons-material/Add'
 import {
-  AccountSummaryCards,
-  AccountSection,
-  AccountDetailPanel,
+  AccountListItem,
+  AccountTransactionsView,
   AccountForm,
+  AccountSummaryCards,
 } from '@/components/features'
 import { Button } from '@/components/common'
 import { useAccounts } from '@/hooks/useAccounts'
-import { useTrendData } from '@/hooks/useTrendData'
-import type { AccountType } from '@/types/account'
-
-const ACCOUNT_TYPES: AccountType[] = ['asset', 'liability', 'income', 'expense']
+import type { Account } from '@/types/account'
+import type { TransactionWithAccounts } from '@/types/transaction'
 
 /**
- * Accounts page – manage financial buckets: Assets, Liabilities, Income, Expenses.
+ * Accounts page – list view + per-account transaction detail.
  */
 const Accounts: React.FC = () => {
   const {
     accounts,
     transactions,
-    selectedAccountId,
-    setSelectedAccountId,
-    isFormOpen,
-    editingAccount,
     loading,
     error,
-    showArchived,
-    setShowArchived,
+    isFormOpen,
+    editingAccount,
     activeAccounts,
-    selectedAccount,
-    accountMap,
     totalAssets,
     totalLiabilities,
     netWorth,
@@ -52,35 +42,45 @@ const Accounts: React.FC = () => {
     openAddForm,
   } = useAccounts()
 
-  const {
-    trendRange,
-    setTrendRange,
-    rangeConfig,
-    accountTrendMap,
-    buildSparklinePoints,
-  } = useTrendData(accounts, transactions)
+  const [detailAccount, setDetailAccount] = useState<Account | null>(null)
+
+  // Hydrate plain transactions with populated account objects
+  const accountMap = useMemo(
+    () => new Map(accounts.map((a) => [a.id, a])),
+    [accounts]
+  )
+  const hydratedTransactions = useMemo((): TransactionWithAccounts[] => {
+    return transactions
+      .map((txn) => {
+        const fromAccount = accountMap.get(txn.fromAccountId)
+        const toAccount = accountMap.get(txn.toAccountId)
+        if (!fromAccount || !toAccount) return null
+        return { ...txn, fromAccount, toAccount }
+      })
+      .filter((t): t is TransactionWithAccounts => t !== null)
+  }, [transactions, accountMap])
 
   if (loading) {
     return (
       <Box
         sx={{
-          p: '2rem',
-          maxWidth: '1440px',
-          margin: '0 auto',
+          minHeight: '60vh',
           display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
+          justifyContent: 'center',
           gap: 2,
         }}
       >
-        <CircularProgress size={20} />
-        <Typography>Loading accounts...</Typography>
+        <CircularProgress />
+        <Typography color="text.secondary">Loading accounts...</Typography>
       </Box>
     )
   }
 
   if (error) {
     return (
-      <Box sx={{ p: '2rem', maxWidth: '1440px', margin: '0 auto' }}>
+      <Box sx={{ p: '2rem', maxWidth: '640px', margin: '0 auto' }}>
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
@@ -89,148 +89,123 @@ const Accounts: React.FC = () => {
     )
   }
 
+  // ── Detail / transactions view ──
+  if (detailAccount) {
+    // Keep account in sync with latest data
+    const latestAccount =
+      accounts.find((a) => a.id === detailAccount.id) ?? detailAccount
+    return (
+      <Box sx={{ p: '1.5rem', maxWidth: '680px', margin: '0 auto' }}>
+        <AccountTransactionsView
+          account={latestAccount}
+          transactions={hydratedTransactions}
+          onBack={() => setDetailAccount(null)}
+        />
+        <AccountForm
+          isOpen={isFormOpen}
+          onClose={handleCloseForm}
+          onSubmit={handleCreateAccount}
+          accounts={accounts}
+          account={editingAccount ?? undefined}
+        />
+      </Box>
+    )
+  }
+
+  // ── List view ──
+  const assetAccounts = activeAccounts.filter((a) => a.type === 'asset')
+  const liabilityAccounts = activeAccounts.filter((a) => a.type === 'liability')
+  const incomeAccounts = activeAccounts.filter((a) => a.type === 'income')
+  const expenseAccounts = activeAccounts.filter((a) => a.type === 'expense')
+
+  const sections = [
+    { label: 'Assets', items: assetAccounts },
+    { label: 'Liabilities', items: liabilityAccounts },
+    { label: 'Income', items: incomeAccounts },
+    { label: 'Expenses', items: expenseAccounts },
+  ].filter((s) => s.items.length > 0)
+
   return (
-    <Box sx={{ p: '2rem', maxWidth: '1440px', margin: '0 auto' }}>
-      {/* Page header */}
+    <Box sx={{ p: '1.5rem 2rem', maxWidth: '680px', margin: '0 auto' }}>
+      {/* Header */}
       <Box
         sx={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          gap: '1rem',
           mb: '1.5rem',
         }}
       >
         <Box>
           <Typography
             variant="h4"
-            component="h1"
             sx={{
-              m: 0,
-              fontSize: '1.8rem',
               fontWeight: 700,
+              fontSize: '1.8rem',
               color: 'text.primary',
+              mb: 0.25,
             }}
           >
             Accounts
           </Typography>
-          <Typography
-            sx={{
-              m: '0.35rem 0 0',
-              color: 'text.secondary',
-              fontSize: '0.92rem',
-            }}
-          >
-            {showArchived
-              ? 'Viewing archived accounts. Select one to unarchive or delete it.'
-              : 'Manage your financial buckets: Assets, Liabilities, Income, and Expenses.'}
+          <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+            Manage your financial accounts
           </Typography>
         </Box>
-        <Box sx={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-          <FormControl size="small" sx={{ minWidth: 140 }}>
-            <InputLabel id="graph-range-label">Graph Range</InputLabel>
-            <MuiSelect
-              labelId="graph-range-label"
-              label="Graph Range"
-              value={trendRange}
-              onChange={(e) =>
-                setTrendRange(e.target.value as typeof trendRange)
-              }
-            >
-              <MenuItem value="weekly">Weekly</MenuItem>
-              <MenuItem value="monthly">Monthly</MenuItem>
-              <MenuItem value="yearly">Yearly</MenuItem>
-            </MuiSelect>
-          </FormControl>
-          <Button
-            variant={showArchived ? 'primary' : 'secondary'}
-            onClick={() => {
-              setShowArchived((p) => !p)
-              setSelectedAccountId(null)
-            }}
-          >
-            {showArchived ? 'Active Accounts' : 'Show Archived'}
-          </Button>
-          <Button onClick={openAddForm}>Add Account</Button>
-        </Box>
+        <MuiButton
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={openAddForm}
+          sx={{ textTransform: 'none', fontWeight: 600, borderRadius: '8px' }}
+        >
+          Add Account
+        </MuiButton>
       </Box>
 
+      {/* Summary cards */}
       <AccountSummaryCards
         netWorth={netWorth}
         totalAssets={totalAssets}
         totalLiabilities={totalLiabilities}
       />
 
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.7fr) minmax(340px, 0.9fr)',
-          gap: '1rem',
-        }}
-      >
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {showArchived && activeAccounts.length === 0 && (
-            <Box
-              sx={{
-                backgroundColor: 'background.paper',
-                border: '1px solid', borderColor: 'divider',
-                borderRadius: '12px',
-                p: '2rem',
-                textAlign: 'center',
-              }}
-            >
-              <Typography
-                sx={{ color: 'text.secondary', fontSize: '0.92rem' }}
-              >
-                No archived accounts.
-              </Typography>
-            </Box>
-          )}
-          {ACCOUNT_TYPES.map((type) => {
-            const sectionAccounts = activeAccounts.filter(
-              (a) => a.type === type
-            )
-            if (sectionAccounts.length === 0) return null
-            return (
-              <AccountSection
-                key={type}
-                type={type}
-                accounts={sectionAccounts}
-                selectedAccountId={selectedAccountId}
-                onSelectAccount={(id) =>
-                  setSelectedAccountId((prev) => (prev === id ? null : id))
-                }
-                showArchived={showArchived}
-                accountMap={accountMap}
-                accountTrendMap={accountTrendMap}
-                buildSparklinePoints={buildSparklinePoints}
+      {/* Account sections */}
+      {sections.map(({ label, items }) => (
+        <Box key={label} sx={{ mb: '1.5rem' }}>
+          <Typography
+            sx={{
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'text.secondary',
+              mb: '0.6rem',
+              px: '0.25rem',
+            }}
+          >
+            {label}
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            {items.map((account) => (
+              <AccountListItem
+                key={account.id}
+                account={account}
+                onClick={() => setDetailAccount(account)}
+                onEdit={handleEditAccount}
+                onToggleStatus={handleToggleAccountStatus}
+                onDelete={handleDeleteAccount}
               />
-            )
-          })}
+            ))}
+          </Box>
         </Box>
+      ))}
 
-        <Box
-          component="aside"
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.85rem',
-            minWidth: 0,
-          }}
-        >
-          <AccountDetailPanel
-            selectedAccount={selectedAccount}
-            showArchived={showArchived}
-            rangeLabel={rangeConfig.label}
-            rangeSince={rangeConfig.startDate}
-            transactions={transactions}
-            accountMap={accountMap}
-            onEdit={handleEditAccount}
-            onToggleStatus={handleToggleAccountStatus}
-            onDelete={handleDeleteAccount}
-          />
+      {sections.length === 0 && (
+        <Box sx={{ textAlign: 'center', py: '4rem', color: 'text.secondary' }}>
+          <Typography sx={{ mb: 1 }}>No accounts yet</Typography>
+          <Button onClick={openAddForm}>Add your first account</Button>
         </Box>
-      </Box>
+      )}
 
       <AccountForm
         isOpen={isFormOpen}

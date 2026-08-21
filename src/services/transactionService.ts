@@ -8,6 +8,7 @@ import type {
 import type {
   Transaction,
   CreateTransactionDto,
+  UpdateTransactionDto,
   TransactionFilter,
 } from '@/types/transaction'
 import { validateCreateTransaction } from './validationService'
@@ -328,4 +329,137 @@ export async function deleteTransaction(
     success: true,
     data: undefined,
   }
+}
+
+/**
+ * Update editable fields of a transaction.
+ * If fromAccountId or toAccountId change, the old balance changes are reversed
+ * and new balance changes are applied.
+ */
+export async function updateTransaction(
+  id: string,
+  updates: UpdateTransactionDto
+): Promise<Result<Transaction, NotFoundError | StorageError>> {
+  const transactionResult = await storageService.getTransaction(id)
+
+  if (!transactionResult.success) {
+    return {
+      success: false,
+      error: { code: 'NOT_FOUND', message: 'Transaction not found' },
+    }
+  }
+
+  const original = transactionResult.data
+  const newFromAccountId = updates.fromAccountId ?? original.fromAccountId
+  const newToAccountId = updates.toAccountId ?? original.toAccountId
+  const accountsChanged =
+    newFromAccountId !== original.fromAccountId ||
+    newToAccountId !== original.toAccountId
+
+  if (accountsChanged) {
+    // Reverse original balance changes
+    const oldFromResult = await accountService.getAccount(
+      original.fromAccountId
+    )
+    const oldToResult = await accountService.getAccount(original.toAccountId)
+
+    if (oldFromResult.success) {
+      await storageService.saveAccount({
+        ...oldFromResult.data,
+        balance: oldFromResult.data.balance + original.amount,
+        updatedAt: new Date().toISOString(),
+      })
+    }
+    if (oldToResult.success) {
+      await storageService.saveAccount({
+        ...oldToResult.data,
+        balance: oldToResult.data.balance - original.amount,
+        updatedAt: new Date().toISOString(),
+      })
+    }
+
+    // Apply new balance changes
+    const newFromResult = await accountService.getAccount(newFromAccountId)
+    const newToResult = await accountService.getAccount(newToAccountId)
+
+    if (!newFromResult.success) {
+      // Rollback: re-apply original changes
+      if (oldFromResult.success) {
+        await storageService.saveAccount({
+          ...oldFromResult.data,
+          balance: oldFromResult.data.balance - original.amount,
+          updatedAt: new Date().toISOString(),
+        })
+      }
+      if (oldToResult.success) {
+        await storageService.saveAccount({
+          ...oldToResult.data,
+          balance: oldToResult.data.balance + original.amount,
+          updatedAt: new Date().toISOString(),
+        })
+      }
+      return {
+        success: false,
+        error: { code: 'STORAGE_ERROR', message: 'Source account not found' },
+      }
+    }
+    if (!newToResult.success) {
+      // Rollback
+      if (oldFromResult.success) {
+        await storageService.saveAccount({
+          ...oldFromResult.data,
+          balance: oldFromResult.data.balance - original.amount,
+          updatedAt: new Date().toISOString(),
+        })
+      }
+      if (oldToResult.success) {
+        await storageService.saveAccount({
+          ...oldToResult.data,
+          balance: oldToResult.data.balance + original.amount,
+          updatedAt: new Date().toISOString(),
+        })
+      }
+      return {
+        success: false,
+        error: {
+          code: 'STORAGE_ERROR',
+          message: 'Destination account not found',
+        },
+      }
+    }
+
+    await storageService.saveAccount({
+      ...newFromResult.data,
+      balance: newFromResult.data.balance - original.amount,
+      updatedAt: new Date().toISOString(),
+    })
+    await storageService.saveAccount({
+      ...newToResult.data,
+      balance: newToResult.data.balance + original.amount,
+      updatedAt: new Date().toISOString(),
+    })
+  }
+
+  const updated: Transaction = {
+    ...original,
+    fromAccountId: newFromAccountId,
+    toAccountId: newToAccountId,
+    ...(updates.description !== undefined && {
+      description: updates.description,
+    }),
+    ...(updates.date !== undefined && { date: updates.date }),
+    ...(updates.category !== undefined && { category: updates.category }),
+    ...(updates.tags !== undefined && { tags: updates.tags }),
+  }
+
+  const saveResult = await storageService.saveTransaction(updated)
+
+  if (!saveResult.success) {
+    return {
+      success: false,
+      error: { code: 'STORAGE_ERROR', message: 'Failed to save transaction' },
+    }
+  }
+
+  return { success: true, data: updated }
 }

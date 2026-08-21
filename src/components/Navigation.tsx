@@ -9,18 +9,50 @@ import Typography from '@mui/material/Typography'
 import IconButton from '@mui/material/IconButton'
 import LightModeIcon from '@mui/icons-material/LightMode'
 import DarkModeIcon from '@mui/icons-material/DarkMode'
+import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined'
+import AccountBalanceWalletOutlinedIcon from '@mui/icons-material/AccountBalanceWalletOutlined'
+import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined'
+import RepeatOutlinedIcon from '@mui/icons-material/RepeatOutlined'
+import ShowChartIcon from '@mui/icons-material/ShowChart'
+import PieChartOutlineOutlinedIcon from '@mui/icons-material/PieChartOutlineOutlined'
+import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined'
 
 const NAV_LINKS = [
-  { href: '/', label: 'Dashboard', exact: true },
-  { href: '/accounts', label: 'Accounts', exact: false },
-  { href: '/transactions', label: 'Transactions', exact: false },
-  { href: '/recurring', label: 'Recurring', exact: false },
-  { href: '/investments', label: 'Investments', exact: false },
+  { href: '/', label: 'Dashboard', Icon: GridViewOutlinedIcon, exact: true },
+  {
+    href: '/accounts',
+    label: 'Accounts',
+    Icon: AccountBalanceWalletOutlinedIcon,
+    exact: false,
+  },
+  {
+    href: '/transactions',
+    label: 'Transactions',
+    Icon: ReceiptLongOutlinedIcon,
+    exact: false,
+  },
+  {
+    href: '/recurring',
+    label: 'Recurring',
+    Icon: RepeatOutlinedIcon,
+    exact: false,
+  },
+  {
+    href: '/budgets',
+    label: 'Budgets',
+    Icon: PieChartOutlineOutlinedIcon,
+    exact: false,
+  },
+  {
+    href: '/categories',
+    label: 'Categories',
+    Icon: CategoryOutlinedIcon,
+    exact: false,
+  },
 ]
 
 /**
- * Main navigation component
- * Provides links to all primary pages
+ * Main navigation component — vertical sidebar
  */
 const Navigation: React.FC = () => {
   const { theme, toggleTheme } = useTheme()
@@ -30,97 +62,149 @@ const Navigation: React.FC = () => {
     <Box
       component="nav"
       sx={{
-        backgroundColor: 'background.paper',
-        color: 'text.primary',
-        padding: '1rem 2rem',
+        width: '220px',
+        flexShrink: 0,
+        height: '100vh',
+        position: 'sticky',
+        top: 0,
+        backgroundColor: 'sidebar.bg',
         display: 'flex',
-        alignItems: 'center',
-        gap: '2rem',
-        boxShadow: 2,
-        borderBottom: '1px solid',
-        borderBottomColor: 'divider',
+        flexDirection: 'column',
+        overflowY: 'auto',
+        scrollbarWidth: 'none',
+        '&::-webkit-scrollbar': { display: 'none' },
       }}
     >
-      <Box>
-        <Typography
-          component="span"
+      {/* Logo */}
+      <Box
+        sx={{
+          px: '1.25rem',
+          py: '1.5rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+          borderBottom: '1px solid',
+          borderBottomColor: 'sidebar.border',
+          mb: '0.5rem',
+        }}
+      >
+        <Box
           sx={{
-            fontSize: '1.5rem',
-            fontWeight: 600,
-            color: 'primary.main',
+            width: 34,
+            height: 34,
+            backgroundColor: 'sidebar.accent',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          <ShowChartIcon sx={{ color: '#fff', fontSize: '1.1rem' }} />
+        </Box>
+        <Typography
+          sx={{
+            color: '#ffffff',
+            fontWeight: 700,
+            fontSize: '1rem',
             letterSpacing: '-0.01em',
           }}
         >
-          MoneyFlow
+          FinanceFlow
         </Typography>
       </Box>
+
+      {/* Nav links */}
       <Box
-        component="ul"
         sx={{
-          listStyle: 'none',
-          m: 0,
-          p: 0,
-          display: 'flex',
-          gap: '2rem',
           flex: 1,
-          '& a': {
-            color: 'text.secondary',
-            textDecoration: 'none',
-            fontSize: '1rem',
-            fontWeight: 500,
-            padding: '0.5rem 1rem',
-            borderRadius: '4px',
-            transition: 'background-color 0.2s, color 0.2s',
-            '&:hover': {
-              backgroundColor: 'action.hover',
-              color: 'text.primary',
-            },
-            '&.active': {
-              backgroundColor: 'primary.main',
-              color: 'common.white',
-            },
-          },
-          '& li': { m: 0 },
+          px: '0.75rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.125rem',
         }}
       >
-        {NAV_LINKS.map(({ href, label, exact }) => {
+        {NAV_LINKS.map(({ href, label, Icon, exact }) => {
           const isActive = exact ? pathname === href : pathname.startsWith(href)
           return (
-            <Box component="li" key={href}>
-              <Link href={href} className={isActive ? 'active' : ''}>
-                {label}
-              </Link>
-            </Box>
+            <Link key={href} href={href} style={{ textDecoration: 'none' }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem',
+                  px: '0.875rem',
+                  py: '0.625rem',
+                  borderRadius: '0.5rem',
+                  backgroundColor: isActive ? 'sidebar.accent' : 'transparent',
+                  color: isActive ? 'primary.contrastText' : 'sidebar.text',
+                  transition: 'all 0.15s ease',
+                  '&:hover': {
+                    backgroundColor: isActive
+                      ? 'sidebar.accent'
+                      : 'sidebar.hover',
+                    color: 'common.white',
+                  },
+                }}
+              >
+                <Icon sx={{ fontSize: '1.125rem', flexShrink: 0 }} />
+                <Typography
+                  sx={{
+                    fontSize: '0.875rem',
+                    fontWeight: isActive ? 600 : 400,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {label}
+                </Typography>
+              </Box>
+            </Link>
           )
         })}
       </Box>
-      <IconButton
-        onClick={toggleTheme}
-        aria-label="Toggle theme"
-        size="small"
+
+      {/* Footer */}
+      <Box
         sx={{
-          width: 40,
-          height: 40,
-          fontSize: '1.25rem',
-          backgroundColor: 'action.selected',
-          border: '1px solid',
-          borderColor: 'divider',
-          borderRadius: '8px',
-          '&:hover': {
-            backgroundColor: 'action.hover',
-            transform: 'scale(1.05)',
-          },
+          px: '1.25rem',
+          py: '1.25rem',
+          borderTop: '1px solid',
+          borderTopColor: 'sidebar.border',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
         }}
       >
-        {theme === 'light' ? (
-          <DarkModeIcon fontSize="small" />
-        ) : (
-          <LightModeIcon fontSize="small" />
-        )}
-      </IconButton>
+        <Typography
+          sx={{ fontSize: '0.6875rem', color: 'sidebar.text', opacity: 0.6 }}
+        >
+          Personal Finance Tracker
+        </Typography>
+        <IconButton
+          onClick={toggleTheme}
+          size="small"
+          aria-label="Toggle theme"
+          sx={{
+            width: 30,
+            height: 30,
+            backgroundColor: 'rgba(255,255,255,0.08)',
+            borderRadius: '6px',
+            color: 'sidebar.text',
+            '&:hover': {
+              backgroundColor: 'rgba(255,255,255,0.14)',
+              color: '#fff',
+            },
+          }}
+        >
+          {theme === 'light' ? (
+            <DarkModeIcon sx={{ fontSize: '0.9rem' }} />
+          ) : (
+            <LightModeIcon sx={{ fontSize: '0.9rem' }} />
+          )}
+        </IconButton>
+      </Box>
     </Box>
   )
 }
 
 export default Navigation
-

@@ -3,7 +3,6 @@ import type { Account } from '@/types/account'
 import type { Transaction } from '@/types/transaction'
 import type { RecurringTransaction } from '@/types/recurring'
 import type { NetWorthSnapshot } from '@/types/netWorth'
-import type { InvestmentSnapshot } from '@/types/investment'
 import {
   isValidUUID,
   isValidAmount,
@@ -20,7 +19,6 @@ import {
 const STORAGE_KEYS = {
   ACCOUNTS: 'moneyflow_accounts',
   RECURRING: 'moneyflow_recurring',
-  INVESTMENT_SNAPSHOTS: 'moneyflow_investment_snapshots',
   VERSION: 'moneyflow_version',
   // Partitioned keys — dynamic suffixes _YYYY_MM / _YYYY
   TRANSACTION_PREFIX: 'moneyflow_transactions_',
@@ -499,74 +497,6 @@ export class StorageService {
   }
 
   /**
-   * Investment Snapshot Operations
-   */
-
-  async getInvestmentSnapshots(
-    accountId?: string
-  ): Promise<
-    Result<InvestmentSnapshot[], { type: 'StorageError'; message: string }>
-  > {
-    try {
-      const container = this.getContainer<InvestmentSnapshot>(
-        STORAGE_KEYS.INVESTMENT_SNAPSHOTS
-      )
-      let data = [...container.data]
-      if (accountId) {
-        data = data.filter((s) => s.accountId === accountId)
-      }
-      data.sort((a, b) => a.date.localeCompare(b.date))
-      return { success: true, data }
-    } catch (error) {
-      return {
-        success: false,
-        error: {
-          type: 'StorageError',
-          message:
-            error instanceof Error
-              ? error.message
-              : 'Failed to retrieve investment snapshots',
-        },
-      }
-    }
-  }
-
-  async saveInvestmentSnapshot(
-    snapshot: InvestmentSnapshot
-  ): Promise<
-    Result<InvestmentSnapshot, { type: 'StorageError'; message: string }>
-  > {
-    try {
-      const container = this.getContainer<InvestmentSnapshot>(
-        STORAGE_KEYS.INVESTMENT_SNAPSHOTS
-      )
-      const snapshots = [...container.data]
-      // One entry per account per day — overwrite if same accountId+date exists
-      const existingIdx = snapshots.findIndex(
-        (s) => s.accountId === snapshot.accountId && s.date === snapshot.date
-      )
-      if (existingIdx >= 0) {
-        snapshots[existingIdx] = snapshot
-      } else {
-        snapshots.push(snapshot)
-      }
-      this.setContainer(STORAGE_KEYS.INVESTMENT_SNAPSHOTS, snapshots)
-      return { success: true, data: snapshot }
-    } catch (error) {
-      return {
-        success: false,
-        error: {
-          type: 'StorageError',
-          message:
-            error instanceof Error
-              ? error.message
-              : 'Failed to save investment snapshot',
-        },
-      }
-    }
-  }
-
-  /**
    * Net Worth Snapshot Operations
    * Snapshots are partitioned by year: moneyflow_networth_YYYY
    */
@@ -800,7 +730,6 @@ export class StorageService {
     try {
       localStorage.removeItem(STORAGE_KEYS.ACCOUNTS)
       localStorage.removeItem(STORAGE_KEYS.RECURRING)
-      localStorage.removeItem(STORAGE_KEYS.INVESTMENT_SNAPSHOTS)
       // Remove all transaction month partitions
       for (const key of this.getAllTransactionPartitionKeys()) {
         localStorage.removeItem(key)
@@ -1082,6 +1011,8 @@ export function initializeDriveStorage(): void {
   if (!_drive) {
     _drive = new DriveStorageService()
   }
+  // Eagerly warm the Drive file-ID cache so the first page load is fast.
+  _drive.preWarm()
 }
 
 export function clearDriveStorage(): void {
@@ -1090,7 +1021,6 @@ export function clearDriveStorage(): void {
 
 function svc(): DriveStorageService {
   if (!_drive) throw new Error('Not authenticated. Please sign in.')
-  console.log('Using DriveStorageService instance:', _drive)
   return _drive
 }
 
@@ -1113,10 +1043,15 @@ export const deleteRecurringTransaction = (id: string) =>
 export const getNetWorthSnapshots = () => svc().getNetWorthSnapshots()
 export const saveNetWorthSnapshot = (snapshot: NetWorthSnapshot) =>
   svc().saveNetWorthSnapshot(snapshot)
-export const getInvestmentSnapshots = (accountId?: string) =>
-  svc().getInvestmentSnapshots(accountId)
-export const saveInvestmentSnapshot = (snapshot: InvestmentSnapshot) =>
-  svc().saveInvestmentSnapshot(snapshot)
 export const exportData = () => svc().exportData()
 export const importData = (data: ExportData) => svc().importData(data)
 export const clearAllData = () => svc().clearAllData()
+export const getBudgets = () => svc().getBudgets()
+export const saveBudget = (budget: import('@/types/budget').Budget) =>
+  svc().saveBudget(budget)
+export const deleteBudget = (id: string) => svc().deleteBudget(id)
+export const getCategories = () => svc().getCategories()
+export const saveCategory = (
+  category: import('@/types/transaction').TransactionCategory
+) => svc().saveCategory(category)
+export const deleteCategory = (id: string) => svc().deleteCategory(id)

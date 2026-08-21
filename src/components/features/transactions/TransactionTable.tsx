@@ -1,7 +1,10 @@
 'use client'
 
 import React from 'react'
-import type { TransactionWithAccounts } from '@/types/transaction'
+import type {
+  TransactionCategory,
+  TransactionWithAccounts,
+} from '@/types/transaction'
 import { TransactionTableRow } from './TransactionTableRow'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
@@ -13,7 +16,9 @@ import TableCell from '@mui/material/TableCell'
 
 interface TransactionTableProps {
   transactions: TransactionWithAccounts[]
+  categories: TransactionCategory[]
   onDelete?: (transaction: TransactionWithAccounts) => void
+  onEdit?: (transaction: TransactionWithAccounts) => void
 }
 
 /**
@@ -21,7 +26,9 @@ interface TransactionTableProps {
  */
 const TransactionTable: React.FC<TransactionTableProps> = ({
   transactions,
+  categories,
   onDelete,
+  onEdit,
 }) => {
   if (transactions.length === 0) {
     return (
@@ -34,9 +41,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
         }}
       >
         <Typography>No transactions found</Typography>
-        <Typography
-          sx={{ fontSize: '0.875rem', color: 'text.secondary' }}
-        >
+        <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
           Try adjusting your filters or record a new transaction
         </Typography>
       </Box>
@@ -47,7 +52,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
     <Box
       sx={{
         backgroundColor: 'background.paper',
-        border: '1px solid', borderColor: 'divider',
+        border: '1px solid',
+        borderColor: 'divider',
         borderRadius: '0.5rem',
         overflow: 'hidden',
       }}
@@ -89,7 +95,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                 textTransform: 'uppercase',
               }}
             >
-              SOURCE (DEBIT)
+              FROM (DEBIT)
             </TableCell>
             <TableCell
               sx={{
@@ -101,7 +107,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
                 textTransform: 'uppercase',
               }}
             >
-              DEST (DEBIT)
+              TO (CREDIT)
             </TableCell>
             <TableCell
               sx={{
@@ -143,7 +149,13 @@ const TransactionTable: React.FC<TransactionTableProps> = ({
         </TableHead>
         <TableBody>
           {transactions.map((txn) => (
-            <TransactionTableRow key={txn.id} txn={txn} onDelete={onDelete} />
+            <TransactionTableRow
+              key={txn.id}
+              txn={txn}
+              categories={categories}
+              onDelete={onDelete}
+              onEdit={onEdit}
+            />
           ))}
         </TableBody>
       </Table>

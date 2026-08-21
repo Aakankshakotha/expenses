@@ -3,8 +3,10 @@
 import React from 'react'
 import { formatCurrency } from '@/utils/currencyUtils'
 import { formatDate } from '@/utils/dateUtils'
-import { getCategoryById } from '@/constants/categories'
-import type { TransactionWithAccounts } from '@/types/transaction'
+import type {
+  TransactionCategory,
+  TransactionWithAccounts,
+} from '@/types/transaction'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import TableRow from '@mui/material/TableRow'
@@ -12,10 +14,13 @@ import TableCell from '@mui/material/TableCell'
 import Chip from '@mui/material/Chip'
 import IconButton from '@mui/material/IconButton'
 import CloseIcon from '@mui/icons-material/Close'
+import EditIcon from '@mui/icons-material/Edit'
 
 interface TransactionTableRowProps {
   txn: TransactionWithAccounts
+  categories: TransactionCategory[]
   onDelete?: (txn: TransactionWithAccounts) => void
+  onEdit?: (txn: TransactionWithAccounts) => void
 }
 
 type TxnType = 'income' | 'expense' | 'transfer'
@@ -48,9 +53,13 @@ const TYPE_ICON: Record<TxnType, string> = {
 
 export const TransactionTableRow: React.FC<TransactionTableRowProps> = ({
   txn,
+  categories,
   onDelete,
+  onEdit,
 }) => {
-  const category = txn.category ? getCategoryById(txn.category) : null
+  const category = txn.category
+    ? (categories.find((c) => c.id === txn.category) ?? null)
+    : null
   const type = getTransactionType(txn)
 
   return (
@@ -59,17 +68,22 @@ export const TransactionTableRow: React.FC<TransactionTableRowProps> = ({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <Box
             sx={{
-              width: '2rem',
-              height: '2rem',
+              width: '2.1rem',
+              height: '2.1rem',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: 'action.selected',
+              backgroundColor: category?.color
+                ? `${category.color}22`
+                : 'action.selected',
+              border: '1.5px solid',
+              borderColor: category?.color ?? 'divider',
               borderRadius: '50%',
               flexShrink: 0,
+              fontSize: '1rem',
             }}
           >
-            {TYPE_ICON[type]}
+            {category?.icon ?? TYPE_ICON[type]}
           </Box>
           <Box>
             <Typography
@@ -119,7 +133,7 @@ export const TransactionTableRow: React.FC<TransactionTableRowProps> = ({
               letterSpacing: '0.05em',
             }}
           >
-            CR
+            DR
           </Typography>
           <Typography
             component="span"
@@ -141,7 +155,7 @@ export const TransactionTableRow: React.FC<TransactionTableRowProps> = ({
               letterSpacing: '0.05em',
             }}
           >
-            DR
+            CR
           </Typography>
           <Typography
             component="span"
@@ -174,20 +188,36 @@ export const TransactionTableRow: React.FC<TransactionTableRowProps> = ({
         </Typography>
       </TableCell>
       <TableCell>
-        {onDelete && (
-          <IconButton
-            onClick={() => onDelete(txn)}
-            title="Delete transaction"
-            size="small"
-            aria-label="Delete transaction"
-            sx={{
-              color: 'text.secondary',
-              '&:hover': { color: 'error.main' },
-            }}
-          >
-            <CloseIcon fontSize="small" />
-          </IconButton>
-        )}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          {onEdit && (
+            <IconButton
+              onClick={() => onEdit(txn)}
+              title="Edit transaction"
+              size="small"
+              aria-label="Edit transaction"
+              sx={{
+                color: 'text.secondary',
+                '&:hover': { color: 'primary.main' },
+              }}
+            >
+              <EditIcon fontSize="small" />
+            </IconButton>
+          )}
+          {onDelete && (
+            <IconButton
+              onClick={() => onDelete(txn)}
+              title="Delete transaction"
+              size="small"
+              aria-label="Delete transaction"
+              sx={{
+                color: 'text.secondary',
+                '&:hover': { color: 'error.main' },
+              }}
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          )}
+        </Box>
       </TableCell>
     </TableRow>
   )

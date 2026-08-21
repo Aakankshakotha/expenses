@@ -9,6 +9,8 @@ import Paper from '@mui/material/Paper'
 export interface MetricCardProps {
   title: string
   value: number
+  subtitle?: string
+  valueColor?: string
   trend?: {
     value: number
     direction: 'up' | 'down'
@@ -21,6 +23,8 @@ export interface MetricCardProps {
 export const MetricCard: React.FC<MetricCardProps> = ({
   title,
   value,
+  subtitle,
+  valueColor,
   trend,
   icon,
   color = 'blue',
@@ -95,7 +99,7 @@ export const MetricCard: React.FC<MetricCardProps> = ({
         sx={{
           fontSize: '1.75rem',
           fontWeight: 700,
-          color: 'text.primary',
+          color: valueColor ?? 'text.primary',
           margin: '12px 0 8px',
           lineHeight: 1.2,
           wordBreak: 'break-word',
@@ -103,6 +107,11 @@ export const MetricCard: React.FC<MetricCardProps> = ({
       >
         {formatCurrency(value)}
       </Typography>
+      {subtitle && !trend && (
+        <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+          {subtitle}
+        </Typography>
+      )}
       {trend && (
         <Box
           sx={{

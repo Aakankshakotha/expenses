@@ -94,3 +94,5 @@ export function suggestCategories(description: string): TransactionCategory[] {
 
   return suggestions.slice(0, 3) // Return top 3 suggestions
 }
+
+export { CATEGORIES }

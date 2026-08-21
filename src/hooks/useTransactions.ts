@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react'
 import * as transactionService from '@/services/transactionService'
 import * as accountService from '@/services/accountService'
-import type { TransactionWithAccounts, CreateTransactionDto } from '@/types/transaction'
+import type {
+  TransactionWithAccounts,
+  CreateTransactionDto,
+  UpdateTransactionDto,
+} from '@/types/transaction'
 import type { Account } from '@/types/account'
 
 export interface UseTransactionsReturn {
@@ -12,12 +16,25 @@ export interface UseTransactionsReturn {
   isFormOpen: boolean
   openForm: () => void
   closeForm: () => void
+  editingTransaction: TransactionWithAccounts | null
+  openEditForm: (transaction: TransactionWithAccounts) => void
+  closeEditForm: () => void
   handleCreateTransaction: (data: CreateTransactionDto) => Promise<void>
-  handleDeleteTransaction: (transaction: TransactionWithAccounts) => Promise<void>
+  handleUpdateTransaction: (
+    id: string,
+    data: UpdateTransactionDto
+  ) => Promise<void>
+  handleDeleteTransaction: (
+    transaction: TransactionWithAccounts
+  ) => Promise<void>
 }
 
 export const useTransactions = (): UseTransactionsReturn => {
-  const [transactions, setTransactions] = useState<TransactionWithAccounts[]>([])
+  const [transactions, setTransactions] = useState<TransactionWithAccounts[]>(
+    []
+  )
+  const [editingTransaction, setEditingTransaction] =
+    useState<TransactionWithAccounts | null>(null)
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -32,7 +49,11 @@ export const useTransactions = (): UseTransactionsReturn => {
     setLoading(true)
     setError(null)
     try {
-      const accountsResult = await accountService.listAccounts()
+      const [accountsResult, transactionsResult] = await Promise.all([
+        accountService.listAccounts(),
+        transactionService.listTransactions(),
+      ])
+
       if (!accountsResult.success) {
         setError('Failed to load accounts')
         setLoading(false)
@@ -40,7 +61,6 @@ export const useTransactions = (): UseTransactionsReturn => {
       }
       setAccounts(accountsResult.data)
 
-      const transactionsResult = await transactionService.listTransactions()
       if (!transactionsResult.success) {
         setError('Failed to load transactions')
         setLoading(false)
@@ -49,8 +69,12 @@ export const useTransactions = (): UseTransactionsReturn => {
 
       const enriched = transactionsResult.data
         .map((txn) => {
-          const fromAccount = accountsResult.data.find((a) => a.id === txn.fromAccountId)
-          const toAccount = accountsResult.data.find((a) => a.id === txn.toAccountId)
+          const fromAccount = accountsResult.data.find(
+            (a) => a.id === txn.fromAccountId
+          )
+          const toAccount = accountsResult.data.find(
+            (a) => a.id === txn.toAccountId
+          )
           if (!fromAccount || !toAccount) return null
           return { ...txn, fromAccount, toAccount } as TransactionWithAccounts
         })
@@ -64,8 +88,19 @@ export const useTransactions = (): UseTransactionsReturn => {
     }
   }
 
-  const handleCreateTransaction = async (data: CreateTransactionDto): Promise<void> => {
+  const handleCreateTransaction = async (
+    data: CreateTransactionDto
+  ): Promise<void> => {
     const result = await transactionService.recordTransaction(data)
+    if (!result.success) throw new Error(result.error.message)
+    await loadData()
+  }
+
+  const handleUpdateTransaction = async (
+    id: string,
+    data: UpdateTransactionDto
+  ): Promise<void> => {
+    const result = await transactionService.updateTransaction(id, data)
     if (!result.success) throw new Error(result.error.message)
     await loadData()
   }
@@ -90,7 +125,11 @@ export const useTransactions = (): UseTransactionsReturn => {
     isFormOpen,
     openForm: () => setIsFormOpen(true),
     closeForm: () => setIsFormOpen(false),
+    editingTransaction,
+    openEditForm: (txn) => setEditingTransaction(txn),
+    closeEditForm: () => setEditingTransaction(null),
     handleCreateTransaction,
+    handleUpdateTransaction,
     handleDeleteTransaction,
   }
 }

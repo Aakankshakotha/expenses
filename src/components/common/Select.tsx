@@ -2,10 +2,8 @@
 
 import { SelectHTMLAttributes, useId, type FocusEvent } from 'react'
 import Box from '@mui/material/Box'
-import FormControl from '@mui/material/FormControl'
-import InputLabel from '@mui/material/InputLabel'
-import NativeSelect from '@mui/material/NativeSelect'
 import FormHelperText from '@mui/material/FormHelperText'
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 
 export interface SelectOption {
   value: string
@@ -45,35 +43,63 @@ export function Select({
   const selectId = id || generatedId
   const descriptionId =
     error || helperText ? `${selectId}-description` : undefined
-  const labelId = `${selectId}-label`
 
   return (
-    <Box className={`select-container ${className}`.trim()}>
-      <FormControl fullWidth size="small" error={Boolean(error)}>
-        {label && (
-          <InputLabel htmlFor={selectId} id={labelId} shrink>
-            {label}
-            {required && <span className="select-required">*</span>}
-          </InputLabel>
-        )}
-        <NativeSelect
+    <Box
+      className={className || undefined}
+      sx={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}
+    >
+      {label && (
+        <label
+          htmlFor={selectId}
+          style={{
+            display: 'block',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            marginBottom: '0.25rem',
+          }}
+        >
+          {label}
+          {required && (
+            <span style={{ color: '#dc2626', marginLeft: '0.15rem' }}>*</span>
+          )}
+        </label>
+      )}
+
+      <Box sx={{ position: 'relative' }}>
+        <Box
+          component="select"
           id={selectId}
           aria-describedby={descriptionId}
           aria-invalid={error ? 'true' : undefined}
           required={required}
           disabled={disabled}
           onChange={onChange}
-          onBlur={(event) => {
-            onBlur?.(event as unknown as FocusEvent<HTMLSelectElement>)
-          }}
-          onFocus={(event) => {
-            onFocus?.(event as unknown as FocusEvent<HTMLSelectElement>)
-          }}
+          onBlur={(e: FocusEvent<HTMLSelectElement>) => onBlur?.(e)}
+          onFocus={(e: FocusEvent<HTMLSelectElement>) => onFocus?.(e)}
           value={value}
-          inputProps={{
-            className: error ? 'select-error' : undefined,
-            'aria-label': label || placeholder || 'Select',
-            ...rest,
+          {...rest}
+          sx={{
+            width: '100%',
+            appearance: 'none',
+            WebkitAppearance: 'none',
+            px: '0.875rem',
+            py: '0.625rem',
+            border: '1px solid',
+            borderColor: error ? 'error.main' : 'divider',
+            borderRadius: '0.5rem',
+            backgroundColor: 'background.paper',
+            fontSize: '0.9375rem',
+            color: value ? 'text.primary' : 'text.secondary',
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            outline: 'none',
+            transition: 'border-color 0.15s ease',
+            '&:focus': {
+              borderColor: 'primary.main',
+            },
+            '&:disabled': {
+              opacity: 0.5,
+            },
           }}
         >
           <option value="" disabled>
@@ -88,13 +114,30 @@ export function Select({
               {option.label}
             </option>
           ))}
-        </NativeSelect>
-        {(error || helperText) && (
-          <FormHelperText id={descriptionId}>
-            {error || helperText}
-          </FormHelperText>
-        )}
-      </FormControl>
+        </Box>
+
+        {/* Chevron icon */}
+        <Box
+          sx={{
+            position: 'absolute',
+            right: '0.625rem',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            pointerEvents: 'none',
+            color: 'text.secondary',
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
+          <KeyboardArrowDownIcon sx={{ fontSize: '1.25rem' }} />
+        </Box>
+      </Box>
+
+      {(error || helperText) && (
+        <FormHelperText id={descriptionId} error={Boolean(error)}>
+          {error || helperText}
+        </FormHelperText>
+      )}
     </Box>
   )
 }

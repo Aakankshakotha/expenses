@@ -17,7 +17,6 @@ import {
   validateUpdateAccount,
 } from './validationService'
 import * as storageService from './storageService'
-import { recordSnapshot } from './investmentSnapshotService'
 
 /**
  * Convert storageService NotFoundError to common NotFoundError
@@ -132,11 +131,6 @@ export async function createAccount(
         code: 'STORAGE_ERROR',
       },
     }
-  }
-
-  // Auto-record initial snapshot for investment accounts
-  if (account.type === 'asset' && account.costBasis !== undefined) {
-    await recordSnapshot(account.id, account.balance, account.costBasis)
   }
 
   return { success: true, data: account }
@@ -291,18 +285,6 @@ export async function updateAccount(
         code: 'STORAGE_ERROR',
       },
     }
-  }
-
-  // Auto-record daily value snapshot for investment accounts (assets with costBasis)
-  if (
-    updatedAccount.type === 'asset' &&
-    updatedAccount.costBasis !== undefined
-  ) {
-    await recordSnapshot(
-      updatedAccount.id,
-      updatedAccount.balance,
-      updatedAccount.costBasis
-    )
   }
 
   return { success: true, data: updatedAccount }

@@ -26,9 +26,9 @@ export function MuiAppThemeProvider({
         palette: {
           mode: theme,
           primary: {
-            main: isDark ? '#fb923c' : '#f97316',
-            dark: isDark ? '#f97316' : '#ea580c',
-            light: isDark ? '#fdba74' : '#fb923c',
+            main: '#1e293b',
+            dark: '#0f172a',
+            light: '#334155',
             contrastText: '#ffffff',
           },
           secondary: {
@@ -62,15 +62,22 @@ export function MuiAppThemeProvider({
             contrastText: '#ffffff',
           },
           background: {
-            default: isDark ? '#0b0b0d' : '#fffaf5',
-            paper: isDark ? '#141418' : '#ffffff',
+            default: isDark ? '#0b0f1a' : '#f1f5f9',
+            paper: isDark ? '#141b2d' : '#ffffff',
           },
           text: {
-            primary: isDark ? '#f5f5f5' : '#1f2937',
-            secondary: isDark ? '#b3b3b8' : '#6b7280',
-            disabled: isDark ? '#4a4a52' : '#d1d5db',
+            primary: isDark ? '#f1f5f9' : '#1e293b',
+            secondary: isDark ? '#94a3b8' : '#64748b',
+            disabled: isDark ? '#334155' : '#cbd5e1',
           },
-          divider: isDark ? '#2a2a31' : '#f1e1d4',
+          divider: isDark ? '#1e293b' : '#e2e8f0',
+          sidebar: {
+            bg: '#0d1b2a',
+            text: '#94a3b8',
+            border: 'rgba(255,255,255,0.06)',
+            hover: 'rgba(255,255,255,0.07)',
+            accent: isDark ? '#34d399' : '#10b981',
+          },
           charts: {
             categorical: [
               '#14b8a6',
@@ -110,15 +117,13 @@ export function MuiAppThemeProvider({
               },
               containedPrimary: {
                 '&:hover': {
-                  backgroundColor: isDark ? '#f97316' : '#ea580c',
+                  backgroundColor: '#0f172a',
                 },
               },
               outlinedPrimary: {
-                borderColor: isDark ? '#fb923c' : '#f97316',
+                borderColor: '#1e293b',
                 '&:hover': {
-                  backgroundColor: isDark
-                    ? 'rgba(251,146,60,0.08)'
-                    : 'rgba(249,115,22,0.06)',
+                  backgroundColor: 'rgba(30,41,59,0.08)',
                 },
               },
             },
@@ -131,12 +136,12 @@ export function MuiAppThemeProvider({
           MuiOutlinedInput: {
             styleOverrides: {
               notchedOutline: {
-                borderColor: isDark ? '#2a2a31' : '#f1e1d4',
+                borderColor: isDark ? '#1e293b' : '#e2e8f0',
                 transition: 'border-color 0.15s ease',
               },
               root: {
                 '&:hover .MuiOutlinedInput-notchedOutline': {
-                  borderColor: isDark ? '#3a3a44' : '#f0c9a8',
+                  borderColor: isDark ? '#334155' : '#cbd5e1',
                 },
               },
             },
@@ -174,7 +179,7 @@ export function MuiAppThemeProvider({
           MuiDivider: {
             styleOverrides: {
               root: {
-                borderColor: isDark ? '#2a2a31' : '#f1e1d4',
+                borderColor: isDark ? '#1e293b' : '#e2e8f0',
               },
             },
           },

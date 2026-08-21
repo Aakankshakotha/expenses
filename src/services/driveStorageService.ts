@@ -24,7 +24,8 @@ import type { Account } from '@/types/account'
 import type { Transaction } from '@/types/transaction'
 import type { RecurringTransaction } from '@/types/recurring'
 import type { NetWorthSnapshot } from '@/types/netWorth'
-import type { InvestmentSnapshot } from '@/types/investment'
+import type { Budget } from '@/types/budget'
+import type { TransactionCategory } from '@/types/transaction'
 import {
   isValidUUID,
   isValidAmount,
@@ -95,8 +96,11 @@ export class DriveStorageService {
   // No access token stored client-side — the token lives in an HTTP-only
   // cookie and is attached by the /api/drive/* server-side proxy.
   private folderId: string | null = null
+  private _ensureFolderPromise: Promise<string> | null = null
   private fileIdCache = new Map<string, string>()
   private cacheWarmed = false
+  // Deduplicates concurrent warmCache() calls so we only hit Drive once.
+  private _warmCachePromise: Promise<void> | null = null
   // Content cache: file name → parsed array. Serves reads from memory after
   // the first Drive fetch. Writes update this cache so subsequent reads on
   // the same page navigation are also instant.
@@ -106,63 +110,84 @@ export class DriveStorageService {
 
   private async ensureFolder(): Promise<string> {
     if (this.folderId) return this.folderId
+    if (!this._ensureFolderPromise) {
+      this._ensureFolderPromise = (async () => {
+        const q = encodeURIComponent(
+          `name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`
+        )
+        const res = await fetch(`${DRIVE_API}/files?q=${q}&fields=files(id)`, {
+          credentials: 'include',
+        })
+        if (res.status === 401) throw tokenExpiredError()
+        if (!res.ok) throw new Error(`Drive API error: ${res.status}`)
 
-    const q = encodeURIComponent(
-      `name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`
-    )
-    const res = await fetch(`${DRIVE_API}/files?q=${q}&fields=files(id)`, {
-      credentials: 'include',
-    })
+        const data = await res.json()
+        if (data.files?.length > 0) {
+          this.folderId = data.files[0].id as string
+          return this.folderId
+        }
 
-    if (res.status === 401) throw tokenExpiredError()
-    if (!res.ok) throw new Error(`Drive API error: ${res.status}`)
+        // Create the folder
+        const createRes = await fetch(`${DRIVE_API}/files`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            name: FOLDER_NAME,
+            mimeType: 'application/vnd.google-apps.folder',
+          }),
+        })
+        if (createRes.status === 401) throw tokenExpiredError()
+        if (!createRes.ok)
+          throw new Error(`Drive create folder error: ${createRes.status}`)
 
-    const data = await res.json()
-    if (data.files?.length > 0) {
-      this.folderId = data.files[0].id as string
-      return this.folderId
+        const folder = await createRes.json()
+        this.folderId = folder.id as string
+        return this.folderId
+      })()
     }
-
-    // Create the folder
-    const createRes = await fetch(`${DRIVE_API}/files`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        name: FOLDER_NAME,
-        mimeType: 'application/vnd.google-apps.folder',
-      }),
-    })
-    if (createRes.status === 401) throw tokenExpiredError()
-    if (!createRes.ok)
-      throw new Error(`Drive create folder error: ${createRes.status}`)
-
-    const folder = await createRes.json()
-    this.folderId = folder.id as string
-    return this.folderId
+    return this._ensureFolderPromise
   }
 
   /**
    * Fetches and caches all file IDs in the MoneyFlow folder at once.
    * Subsequent lookups are served from the in-memory map.
+   * De-duplicated: concurrent callers share the same in-flight promise.
    */
   private async warmCache(): Promise<void> {
     if (this.cacheWarmed) return
-    const folderId = await this.ensureFolder()
-    const q = encodeURIComponent(`'${folderId}' in parents and trashed=false`)
-    const res = await fetch(
-      `${DRIVE_API}/files?q=${q}&fields=files(id,name)&pageSize=1000`,
-      { credentials: 'include' }
-    )
-    if (res.status === 401) throw tokenExpiredError()
-    if (!res.ok) throw new Error(`Drive list error: ${res.status}`)
+    if (!this._warmCachePromise) {
+      this._warmCachePromise = (async () => {
+        const folderId = await this.ensureFolder()
+        const q = encodeURIComponent(
+          `'${folderId}' in parents and trashed=false`
+        )
+        const res = await fetch(
+          `${DRIVE_API}/files?q=${q}&fields=files(id,name)&pageSize=1000`,
+          { credentials: 'include' }
+        )
+        if (res.status === 401) throw tokenExpiredError()
+        if (!res.ok) throw new Error(`Drive list error: ${res.status}`)
 
-    const data = await res.json()
-    for (const file of (data.files as Array<{ id: string; name: string }>) ??
-      []) {
-      this.fileIdCache.set(file.name, file.id)
+        const data = await res.json()
+        for (const file of (data.files as Array<{
+          id: string
+          name: string
+        }>) ?? []) {
+          this.fileIdCache.set(file.name, file.id)
+        }
+        this.cacheWarmed = true
+      })()
     }
-    this.cacheWarmed = true
+    return this._warmCachePromise
+  }
+
+  /** Eagerly warm the cache in the background (call after auth). */
+  preWarm(): void {
+    this.warmCache().catch(() => {
+      // silently ignore — will retry on first data access
+      this._warmCachePromise = null
+    })
   }
 
   // ── Low-level read / write ─────────────────────────────────────────────────
@@ -382,11 +407,10 @@ export class DriveStorageService {
       const txFiles = [...this.fileIdCache.keys()].filter((k) =>
         /^transactions_\d{4}_\d{2}\.json$/.test(k)
       )
-      const all: Transaction[] = []
-      for (const fileName of txFiles) {
-        const data = await this.readFile<Transaction>(fileName)
-        all.push(...data)
-      }
+      const chunks = await Promise.all(
+        txFiles.map((f) => this.readFile<Transaction>(f))
+      )
+      const all = chunks.flat()
       return { success: true, data: all }
     } catch (error) {
       return {
@@ -613,57 +637,6 @@ export class DriveStorageService {
     }
   }
 
-  // ── Investment Snapshot Operations ─────────────────────────────────────────
-
-  async getInvestmentSnapshots(
-    accountId?: string
-  ): Promise<
-    Result<InvestmentSnapshot[], { type: 'StorageError'; message: string }>
-  > {
-    try {
-      let data = await this.readFile<InvestmentSnapshot>('investments.json')
-      if (accountId) data = data.filter((s) => s.accountId === accountId)
-      data.sort((a, b) => a.date.localeCompare(b.date))
-      return { success: true, data }
-    } catch (error) {
-      return {
-        success: false,
-        error: this.storageErr(
-          error instanceof Error
-            ? error.message
-            : 'Failed to retrieve investment snapshots'
-        ),
-      }
-    }
-  }
-
-  async saveInvestmentSnapshot(
-    snapshot: InvestmentSnapshot
-  ): Promise<
-    Result<InvestmentSnapshot, { type: 'StorageError'; message: string }>
-  > {
-    try {
-      const existing =
-        await this.readFile<InvestmentSnapshot>('investments.json')
-      const idx = existing.findIndex(
-        (s) => s.accountId === snapshot.accountId && s.date === snapshot.date
-      )
-      if (idx >= 0) existing[idx] = snapshot
-      else existing.push(snapshot)
-      await this.writeFile('investments.json', existing)
-      return { success: true, data: snapshot }
-    } catch (error) {
-      return {
-        success: false,
-        error: this.storageErr(
-          error instanceof Error
-            ? error.message
-            : 'Failed to save investment snapshot'
-        ),
-      }
-    }
-  }
-
   // ── Net Worth Snapshot Operations ──────────────────────────────────────────
   // Partitioned by year: networth_YYYY.json
 
@@ -830,6 +803,126 @@ export class DriveStorageService {
         success: false,
         error: this.storageErr(
           error instanceof Error ? error.message : 'Failed to import data'
+        ),
+      }
+    }
+  }
+
+  // ── Budget Operations ───────────────────────────────────────────────────────
+
+  async getBudgets(): Promise<
+    Result<Budget[], { type: 'StorageError'; message: string }>
+  > {
+    try {
+      const data = await this.readFile<Budget>('budgets.json')
+      return { success: true, data }
+    } catch (error) {
+      return {
+        success: false,
+        error: this.storageErr(
+          error instanceof Error ? error.message : 'Failed to retrieve budgets'
+        ),
+      }
+    }
+  }
+
+  async saveBudget(
+    budget: Budget
+  ): Promise<Result<Budget, { type: 'StorageError'; message: string }>> {
+    try {
+      const result = await this.getBudgets()
+      const budgets = result.success ? [...result.data] : []
+      const idx = budgets.findIndex((b) => b.id === budget.id)
+      if (idx >= 0) budgets[idx] = budget
+      else budgets.push(budget)
+      await this.writeFile('budgets.json', budgets)
+      return { success: true, data: budget }
+    } catch (error) {
+      return {
+        success: false,
+        error: this.storageErr(
+          error instanceof Error ? error.message : 'Failed to save budget'
+        ),
+      }
+    }
+  }
+
+  async deleteBudget(
+    id: string
+  ): Promise<Result<void, { type: 'StorageError'; message: string }>> {
+    try {
+      const result = await this.getBudgets()
+      const budgets = result.success ? result.data : []
+      const updated = budgets.filter((b) => b.id !== id)
+      await this.writeFile('budgets.json', updated)
+      return { success: true, data: undefined }
+    } catch (error) {
+      return {
+        success: false,
+        error: this.storageErr(
+          error instanceof Error ? error.message : 'Failed to delete budget'
+        ),
+      }
+    }
+  }
+
+  // ── User Category Operations ──────────────────────────────────────────────
+
+  async getCategories(): Promise<
+    Result<TransactionCategory[], { type: 'StorageError'; message: string }>
+  > {
+    try {
+      const data = await this.readFile<TransactionCategory>('categories.json')
+      return { success: true, data }
+    } catch (error) {
+      return {
+        success: false,
+        error: this.storageErr(
+          error instanceof Error
+            ? error.message
+            : 'Failed to retrieve categories'
+        ),
+      }
+    }
+  }
+
+  async saveCategory(
+    category: TransactionCategory
+  ): Promise<
+    Result<TransactionCategory, { type: 'StorageError'; message: string }>
+  > {
+    try {
+      const result = await this.getCategories()
+      const categories = result.success ? [...result.data] : []
+      const idx = categories.findIndex((c) => c.id === category.id)
+      if (idx >= 0) categories[idx] = category
+      else categories.push(category)
+      await this.writeFile('categories.json', categories)
+      return { success: true, data: category }
+    } catch (error) {
+      return {
+        success: false,
+        error: this.storageErr(
+          error instanceof Error ? error.message : 'Failed to save category'
+        ),
+      }
+    }
+  }
+
+  async deleteCategory(
+    id: string
+  ): Promise<Result<void, { type: 'StorageError'; message: string }>> {
+    try {
+      const result = await this.getCategories()
+      const categories = result.success ? result.data : []
+      const updated = categories.filter((c) => c.id !== id)
+      await this.writeFile('categories.json', updated)
+      return { success: true, data: undefined }
+    } catch (error) {
+      return {
+        success: false,
+        error: this.storageErr(
+          error instanceof Error ? error.message : 'Failed to delete category'
         ),
       }
     }
