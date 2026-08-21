@@ -3,27 +3,146 @@
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* Light theme: slate + teal */
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+  --background: #f1f5f9;
+  --card-background: #ffffff;
+  --background-secondary: #ecfdf5;
+  --border-color: #e2e8f0;
+  --border-color-light: #f1f5f9;
+  --border-color-hover: #cbd5e1;
+  --button-background: #ecfdf5;
+  --button-hover-background: #d1fae5;
+  --hover-background: #f0fdf4;
+  --primary-color: #10b981;
+  --primary-strong: #059669;
+  --secondary-color: #64748b;
+  --icon-background: #d1fae5;
+  --badge-background: #d1fae5;
+  --input-background: #ffffff;
+  --input-background-focus: #f0fdf4;
+  --input-background-disabled: #f1f5f9;
+  --shadow-soft: 0 6px 20px rgba(15, 23, 42, 0.06);
+  --success-color: #16a34a;
+  --success-soft: rgba(22, 163, 74, 0.12);
+  --error-color: #dc2626;
+  --error-soft: rgba(220, 38, 38, 0.12);
+  --warning-color: #d97706;
+  --warning-soft: rgba(217, 119, 6, 0.14);
+  --info-color: #0284c7;
+  --info-soft: rgba(2, 132, 199, 0.14);
+  --chart-grid: #e2e8f0;
+  --chart-axis: #94a3b8;
+  --chart-tooltip-bg: #ffffff;
+  --chart-tooltip-border: #e2e8f0;
+  --chart-tooltip-text: #1e293b;
+  --chart-series-1: #10b981;
+  --chart-series-2: #06b6d4;
+  --chart-series-3: #8b5cf6;
+  --chart-series-4: #f43f5e;
+  --chart-series-5: #f59e0b;
+  --chart-series-income: #22c55e;
+  --chart-series-expense: #f87171;
+  --chart-series-liability: #f59e0b;
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-bg-secondary: var(--background-secondary);
+  --color-bg-hover: var(--hover-background);
+  --color-border: var(--border-color);
+  --color-border-hover: var(--border-color-hover);
+  --color-card-bg: var(--card-background);
+  --color-primary: var(--primary-color);
+  --color-secondary: var(--secondary-color);
+  --color-success: var(--success-color);
+  --color-error: var(--error-color);
+  --color-warning: var(--warning-color);
+  --color-info: var(--info-color);
+
+  color-scheme: light;
+  color: var(--text-primary);
+  background-color: var(--background);
+}
+
+/* Dark theme: slate + teal */
+[data-theme='dark'] {
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --background: #0b0f1a;
+  --card-background: #141b2d;
+  --background-secondary: #0f1f2e;
+  --border-color: #1e293b;
+  --border-color-light: #172032;
+  --border-color-hover: #334155;
+  --button-background: #0f2235;
+  --button-hover-background: #163048;
+  --hover-background: #0f2235;
+  --primary-color: #34d399;
+  --primary-strong: #10b981;
+  --secondary-color: #64748b;
+  --icon-background: #0d2e22;
+  --badge-background: #0d2e22;
+  --input-background: #0d1422;
+  --input-background-focus: #0f1f2e;
+  --input-background-disabled: #0b0f1a;
+  --shadow-soft: 0 8px 24px rgba(2, 6, 23, 0.45);
+  --success-color: #4ade80;
+  --success-soft: rgba(74, 222, 128, 0.16);
+  --error-color: #f87171;
+  --error-soft: rgba(248, 113, 113, 0.16);
+  --warning-color: #fbbf24;
+  --warning-soft: rgba(251, 191, 36, 0.16);
+  --info-color: #38bdf8;
+  --info-soft: rgba(56, 189, 248, 0.16);
+  --chart-grid: #1e293b;
+  --chart-axis: #475569;
+  --chart-tooltip-bg: #141b2d;
+  --chart-tooltip-border: #1e293b;
+  --chart-tooltip-text: #f1f5f9;
+  --chart-series-1: #34d399;
+  --chart-series-2: #22d3ee;
+  --chart-series-3: #a78bfa;
+  --chart-series-4: #fb7185;
+  --chart-series-5: #fbbf24;
+  --chart-series-income: #4ade80;
+  --chart-series-expense: #f87171;
+  --chart-series-liability: #fbbf24;
+
+  /* Legacy alias tokens used across older CSS */
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-bg-secondary: var(--background-secondary);
+  --color-bg-hover: var(--hover-background);
+  --color-border: var(--border-color);
+  --color-border-hover: var(--border-color-hover);
+  --color-card-bg: var(--card-background);
+  --color-primary: var(--primary-color);
+  --color-secondary: var(--secondary-color);
+  --color-success: var(--success-color);
+  --color-error: var(--error-color);
+  --color-warning: var(--warning-color);
+  --color-info: var(--info-color);
+
+  color-scheme: dark;
+  color: var(--text-primary);
+  background-color: var(--background);
 }
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
-}
-
-#root {
-  width: 100%;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+  background: var(--background);
+  color: var(--text-primary);
+  transition:
+    background-color 0.25s ease,
+    color 0.25s ease;
 }

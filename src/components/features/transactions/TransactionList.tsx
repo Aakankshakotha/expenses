@@ -1,0 +1,212 @@
+'use client'
+
+import React from 'react'
+import { Input, Select, Button } from '@/components/common'
+import TransactionCard from './TransactionCard'
+import { TRANSACTION_CATEGORIES, CATEGORY_GROUPS } from '@/constants/categories'
+import type { TransactionWithAccounts } from '@/types/transaction'
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+
+interface TransactionListProps {
+  transactions: TransactionWithAccounts[]
+  onDelete?: (transaction: TransactionWithAccounts) => void
+  onSearchChange?: (searchTerm: string) => void
+  onCategoryFilter?: (category: string) => void
+  groupByCategory?: boolean
+  onToggleGrouping?: () => void
+}
+
+/**
+ * TransactionList - displays a list of transactions with search and filtering
+ */
+const TransactionList: React.FC<TransactionListProps> = ({
+  transactions,
+  onDelete,
+  onSearchChange,
+  onCategoryFilter,
+  groupByCategory = false,
+  onToggleGrouping,
+}) => {
+  const [searchTerm, setSearchTerm] = React.useState('')
+  const [categoryFilter, setCategoryFilter] = React.useState('')
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const value = e.target.value
+    setSearchTerm(value)
+    onSearchChange?.(value)
+  }
+
+  const handleCategoryChange = (
+    e: React.ChangeEvent<HTMLSelectElement>
+  ): void => {
+    const value = e.target.value
+    setCategoryFilter(value)
+    onCategoryFilter?.(value)
+  }
+
+  // Group transactions by category
+  const groupedTransactions = React.useMemo(() => {
+    if (!groupByCategory) {
+      return [{ group: null, transactions }]
+    }
+
+    const groups = new Map<string, TransactionWithAccounts[]>()
+
+    transactions.forEach((txn) => {
+      const category = txn.category
+        ? TRANSACTION_CATEGORIES.find((c) => c.id === txn.category)
+        : null
+      const groupKey = category?.group || 'uncategorized'
+
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, [])
+      }
+      groups.get(groupKey)!.push(txn)
+    })
+
+    return Array.from(groups.entries()).map(([group, txns]) => ({
+      group,
+      transactions: txns,
+    }))
+  }, [transactions, groupByCategory])
+
+  if (transactions.length === 0 && !searchTerm && !categoryFilter) {
+    return (
+      <Box
+        sx={{
+          textAlign: 'center',
+          py: '4rem',
+          px: '2rem',
+          color: 'text.secondary',
+        }}
+      >
+        <Typography>No transactions yet</Typography>
+        <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+          Record your first transaction to start tracking your money flow
+        </Typography>
+      </Box>
+    )
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          gap: '1rem',
+          alignItems: 'flex-end',
+          flexWrap: 'wrap',
+        }}
+      >
+        <Box sx={{ flex: 1, minWidth: '200px' }}>
+          <Input
+            type="text"
+            value={searchTerm}
+            onChange={handleSearchChange}
+            placeholder="Search transactions..."
+          />
+        </Box>
+
+        <Box sx={{ minWidth: '180px' }}>
+          <Select
+            value={categoryFilter}
+            onChange={handleCategoryChange}
+            options={[
+              { value: '', label: 'All Categories' },
+              ...TRANSACTION_CATEGORIES.map((cat) => ({
+                value: cat.id,
+                label: cat.name,
+              })),
+            ]}
+            placeholder="Filter by category"
+          />
+        </Box>
+
+        {onToggleGrouping && (
+          <Button
+            variant={groupByCategory ? 'primary' : 'secondary'}
+            size="sm"
+            onClick={onToggleGrouping}
+            title={
+              groupByCategory ? 'Ungroup transactions' : 'Group by category'
+            }
+          >
+            {groupByCategory ? '📋 List' : '📁 Group'}
+          </Button>
+        )}
+      </Box>
+
+      {transactions.length === 0 ? (
+        <Box
+          sx={{
+            textAlign: 'center',
+            py: '4rem',
+            px: '2rem',
+            color: 'text.secondary',
+          }}
+        >
+          <Typography>No transactions found matching "{searchTerm}"</Typography>
+        </Box>
+      ) : (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+          {groupedTransactions.map(({ group, transactions: groupTxns }) => (
+            <Box
+              key={group || 'all'}
+              sx={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
+            >
+              {group && groupByCategory && (
+                <Typography
+                  variant="h6"
+                  component="h3"
+                  sx={{
+                    fontSize: '1.125rem',
+                    fontWeight: 600,
+                    color: 'text.primary',
+                    m: 0,
+                    pb: '0.5rem',
+                    borderBottom: '2px solid',
+                    borderBottomColor: 'divider',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                  }}
+                >
+                  {CATEGORY_GROUPS[group as keyof typeof CATEGORY_GROUPS]
+                    ?.icon || '📋'}{' '}
+                  {CATEGORY_GROUPS[group as keyof typeof CATEGORY_GROUPS]
+                    ?.label || 'Uncategorized'}
+                  <Typography
+                    component="span"
+                    sx={{
+                      fontSize: '0.875rem',
+                      backgroundColor: 'action.selected',
+                      px: '0.5rem',
+                      borderRadius: '0.25rem',
+                      ml: 'auto',
+                    }}
+                  >
+                    {groupTxns.length}
+                  </Typography>
+                </Typography>
+              )}
+              <Box
+                sx={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}
+              >
+                {groupTxns.map((transaction) => (
+                  <TransactionCard
+                    key={transaction.id}
+                    transaction={transaction}
+                    onDelete={onDelete}
+                  />
+                ))}
+              </Box>
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Box>
+  )
+}
+
+export default TransactionList

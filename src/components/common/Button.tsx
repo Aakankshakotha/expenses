@@ -1,7 +1,13 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
-import './Button.css'
+'use client'
 
-export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import MuiButton from '@mui/material/Button'
+import CircularProgress from '@mui/material/CircularProgress'
+
+export interface ButtonProps extends Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  'color'
+> {
   children: ReactNode
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost'
   size?: 'sm' | 'md' | 'lg'
@@ -41,17 +47,44 @@ export function Button({
     onClick?.(e)
   }
 
+  const muiVariant: 'contained' | 'outlined' | 'text' =
+    variant === 'secondary'
+      ? 'outlined'
+      : variant === 'ghost'
+        ? 'text'
+        : 'contained'
+  const muiColor: 'primary' | 'error' | 'inherit' =
+    variant === 'danger' ? 'error' : variant === 'ghost' ? 'inherit' : 'primary'
+
+  const sxBySize = {
+    sm: { py: 0.5, px: 1.5, fontSize: '0.875rem' },
+    md: { py: 0.75, px: 2, fontSize: '0.875rem' },
+    lg: { py: 1, px: 2.5, fontSize: '1rem' },
+  } as const
+
   return (
-    <button
+    <MuiButton
       type={type}
       className={classes}
       disabled={disabled || loading}
       onClick={handleClick}
       aria-disabled={disabled || loading}
+      variant={muiVariant}
+      color={muiColor}
+      fullWidth={fullWidth}
+      sx={{
+        textTransform: 'none',
+        borderRadius: '0.5rem',
+        boxShadow: 'none',
+        '&.Mui-disabled': {
+          pointerEvents: 'auto',
+        },
+        ...sxBySize[size],
+      }}
       {...rest}
     >
-      {loading && <span className="btn-spinner" aria-hidden="true" />}
+      {loading && <CircularProgress size={16} color="inherit" />}
       {children}
-    </button>
+    </MuiButton>
   )
 }

@@ -50,16 +50,48 @@ export async function createAccount(
       success: false,
       error: {
         field: 'unknown',
-        message: 'Failed to check existing accounts',
+        message:
+          accountsResult.error.message || 'Failed to check existing accounts',
         code: 'STORAGE_ERROR',
       },
     }
   }
 
   const existingAccounts = accountsResult.data
+  const normalizedParentId = data.parentAccountId || undefined
+
+  if (normalizedParentId) {
+    const parentAccount = existingAccounts.find(
+      (acc: Account) => acc.id === normalizedParentId
+    )
+
+    if (!parentAccount) {
+      return {
+        success: false,
+        error: {
+          field: 'parentAccountId',
+          message: 'Parent account not found',
+          code: 'NOT_FOUND',
+        },
+      }
+    }
+
+    if (parentAccount.type !== data.type) {
+      return {
+        success: false,
+        error: {
+          field: 'parentAccountId',
+          message: 'Parent account must be the same account type',
+          code: 'INVALID_PARENT_TYPE',
+        },
+      }
+    }
+  }
+
   const duplicate = existingAccounts.find(
     (acc: Account) =>
       acc.type === data.type &&
+      acc.parentAccountId === normalizedParentId &&
       acc.name.toLowerCase() === data.name.toLowerCase()
   )
 
@@ -80,7 +112,9 @@ export async function createAccount(
     id: crypto.randomUUID(),
     name: data.name.trim(),
     type: data.type,
+    parentAccountId: normalizedParentId,
     balance: data.balance ?? 0,
+    ...(data.costBasis !== undefined ? { costBasis: data.costBasis } : {}),
     status: 'active',
     createdAt: now,
     updatedAt: now,
@@ -125,25 +159,90 @@ export async function updateAccount(
   }
 
   const existingAccount = accountResult.data
+  const accountsResult = await storageService.getAccounts()
+  if (!accountsResult.success) {
+    return {
+      success: false,
+      error: {
+        field: 'unknown',
+        message:
+          accountsResult.error.message || 'Failed to check existing accounts',
+        code: 'STORAGE_ERROR',
+      },
+    }
+  }
 
-  // Check for duplicate name if name is being changed
-  if (data.name && data.name !== existingAccount.name) {
-    const accountsResult = await storageService.getAccounts()
-    if (!accountsResult.success) {
+  const allAccounts = accountsResult.data
+  const normalizedParentId =
+    data.parentAccountId === null
+      ? undefined
+      : data.parentAccountId !== undefined
+        ? data.parentAccountId
+        : existingAccount.parentAccountId
+
+  if (normalizedParentId) {
+    if (normalizedParentId === id) {
       return {
         success: false,
         error: {
-          field: 'unknown',
-          message: 'Failed to check existing accounts',
-          code: 'STORAGE_ERROR',
+          field: 'parentAccountId',
+          message: 'Account cannot be a parent of itself',
+          code: 'INVALID_PARENT',
         },
       }
     }
 
-    const duplicate = accountsResult.data.find(
+    const parentAccount = allAccounts.find(
+      (acc: Account) => acc.id === normalizedParentId
+    )
+    if (!parentAccount) {
+      return {
+        success: false,
+        error: {
+          field: 'parentAccountId',
+          message: 'Parent account not found',
+          code: 'NOT_FOUND',
+        },
+      }
+    }
+
+    if (parentAccount.type !== existingAccount.type) {
+      return {
+        success: false,
+        error: {
+          field: 'parentAccountId',
+          message: 'Parent account must be the same account type',
+          code: 'INVALID_PARENT_TYPE',
+        },
+      }
+    }
+
+    let cursor: Account | undefined = parentAccount
+    while (cursor?.parentAccountId) {
+      if (cursor.parentAccountId === id) {
+        return {
+          success: false,
+          error: {
+            field: 'parentAccountId',
+            message: 'Invalid parent account hierarchy',
+            code: 'INVALID_PARENT',
+          },
+        }
+      }
+
+      cursor = allAccounts.find(
+        (acc: Account) => acc.id === cursor?.parentAccountId
+      )
+    }
+  }
+
+  // Check for duplicate name if name is being changed
+  if (data.name && data.name !== existingAccount.name) {
+    const duplicate = allAccounts.find(
       (acc: Account) =>
         acc.id !== id &&
         acc.type === existingAccount.type &&
+        acc.parentAccountId === normalizedParentId &&
         acc.name.toLowerCase() === data.name!.toLowerCase()
     )
 
@@ -164,6 +263,14 @@ export async function updateAccount(
     ...existingAccount,
     name: data.name ? data.name.trim() : existingAccount.name,
     status: data.status ?? existingAccount.status,
+    parentAccountId: normalizedParentId,
+    balance: data.balance ?? existingAccount.balance,
+    costBasis:
+      data.costBasis === null
+        ? undefined
+        : data.costBasis !== undefined
+          ? data.costBasis
+          : existingAccount.costBasis,
     updatedAt: new Date().toISOString(),
   }
 
@@ -199,6 +306,31 @@ export async function deleteAccount(
   }
 
   const account = accountResult.data
+
+  const allAccountsResult = await storageService.getAccounts()
+  if (!allAccountsResult.success) {
+    return {
+      success: false,
+      error: {
+        message: 'Failed to check account hierarchy',
+        code: 'STORAGE_ERROR',
+      },
+    }
+  }
+
+  const childAccounts = allAccountsResult.data.filter(
+    (acc: Account) => acc.parentAccountId === id
+  )
+  if (childAccounts.length > 0) {
+    return {
+      success: false,
+      error: {
+        message: 'Cannot delete account with sub-accounts',
+        code: 'HAS_CHILD_ACCOUNTS',
+        details: { childAccountCount: childAccounts.length },
+      },
+    }
+  }
 
   // Check if account is archived
   if (account.status !== 'archived') {

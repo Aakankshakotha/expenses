@@ -5,6 +5,27 @@
 import type { Account } from './account'
 
 /**
+ * Transaction category with group
+ */
+export interface TransactionCategory {
+  id: string
+  name: string
+  group:
+    | 'home'
+    | 'transportation'
+    | 'food'
+    | 'healthcare'
+    | 'entertainment'
+    | 'utilities'
+    | 'personal'
+    | 'income'
+    | 'other'
+  color: string
+  icon?: string
+  isCustom?: boolean // true for user-defined categories
+}
+
+/**
  * Core transaction entity
  * Represents a transfer of money between two accounts
  */
@@ -15,6 +36,8 @@ export interface Transaction {
   amount: number // Transfer amount in cents (always positive integer)
   description: string // Transaction description
   date: string // Transaction date (YYYY-MM-DD)
+  category?: string // Category ID
+  tags?: string[] // Optional tags
   createdAt: string // ISO 8601 timestamp
 }
 
@@ -36,6 +59,8 @@ export interface CreateTransactionDto {
   amount: number // In cents
   description: string
   date: string // YYYY-MM-DD
+  category?: string // Category ID
+  tags?: string[]
 }
 
 /**
@@ -44,6 +69,10 @@ export interface CreateTransactionDto {
 export interface UpdateTransactionDto {
   description?: string
   date?: string
+  category?: string
+  tags?: string[]
+  fromAccountId?: string
+  toAccountId?: string
 }
 
 /**
@@ -56,6 +85,7 @@ export interface TransactionFilter {
   startDate?: string // YYYY-MM-DD
   endDate?: string // YYYY-MM-DD
   searchTerm?: string // Search in description
+  category?: string // Filter by category
   limit?: number
   offset?: number
 }

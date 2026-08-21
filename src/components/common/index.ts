@@ -12,3 +12,9 @@ export type { ModalProps } from './Modal'
 
 export { Select } from './Select'
 export type { SelectProps, SelectOption } from './Select'
+
+export { MetricCard } from './MetricCard'
+export type { MetricCardProps } from './MetricCard'
+
+export { StatCard } from './StatCard'
+export type { StatCardProps } from './StatCard'
