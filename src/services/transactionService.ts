@@ -17,7 +17,7 @@ import * as accountService from './accountService'
 
 /**
  * Record a new transaction
- * Creates transaction and updates both account balances
+ * Creates a transaction; account balances follow from it automatically
  */
 export async function recordTransaction(
   data: CreateTransactionDto
@@ -79,7 +79,7 @@ export async function recordTransaction(
   }
 
   // Check if from account has sufficient balance.
-  // Liability accounts (credit cards, loans) can go negative — spending increases debt, so no balance check.
+  // Liability accounts (credit cards, loans) have no balance check — spending just increases what is owed.
   // Income accounts are source-only virtual accounts, also exempt.
   if (
     fromAccount.type !== 'income' &&
@@ -108,54 +108,10 @@ export async function recordTransaction(
     createdAt: new Date().toISOString(),
   }
 
-  // Update account balances directly
-  const updatedFromAccount = {
-    ...fromAccount,
-    balance: fromAccount.balance - data.amount,
-    updatedAt: new Date().toISOString(),
-  }
-
-  const fromUpdateResult = await storageService.saveAccount(updatedFromAccount)
-
-  if (!fromUpdateResult.success) {
-    return {
-      success: false,
-      error: {
-        message: 'Failed to update source account balance',
-        code: 'UPDATE_FAILED',
-      },
-    }
-  }
-
-  const updatedToAccount = {
-    ...toAccount,
-    balance: toAccount.balance + data.amount,
-    updatedAt: new Date().toISOString(),
-  }
-
-  const toUpdateResult = await storageService.saveAccount(updatedToAccount)
-
-  if (!toUpdateResult.success) {
-    // Rollback from account update
-    await storageService.saveAccount(fromAccount)
-
-    return {
-      success: false,
-      error: {
-        message: 'Failed to update destination account balance',
-        code: 'UPDATE_FAILED',
-      },
-    }
-  }
-
-  // Save transaction
+  // Balances are derived from transactions, so this single write is the whole change
   const saveResult = await storageService.saveTransaction(transaction)
 
   if (!saveResult.success) {
-    // Rollback account updates
-    await storageService.saveAccount(fromAccount)
-    await storageService.saveAccount(toAccount)
-
     return {
       success: false,
       error: {
@@ -265,7 +221,7 @@ export async function getTransaction(
 }
 
 /**
- * Delete a transaction and reverse balance changes
+ * Delete a transaction; account balances follow from it automatically
  */
 export async function deleteTransaction(
   id: string
@@ -281,35 +237,6 @@ export async function deleteTransaction(
         message: 'Transaction not found',
       },
     }
-  }
-
-  const transaction = transactionResult.data
-
-  // Get both accounts
-  const fromAccountResult = await accountService.getAccount(
-    transaction.fromAccountId
-  )
-  const toAccountResult = await accountService.getAccount(
-    transaction.toAccountId
-  )
-
-  // Reverse balance changes if accounts still exist
-  if (fromAccountResult.success) {
-    const updatedFromAccount = {
-      ...fromAccountResult.data,
-      balance: fromAccountResult.data.balance + transaction.amount,
-      updatedAt: new Date().toISOString(),
-    }
-    await storageService.saveAccount(updatedFromAccount)
-  }
-
-  if (toAccountResult.success) {
-    const updatedToAccount = {
-      ...toAccountResult.data,
-      balance: toAccountResult.data.balance - transaction.amount,
-      updatedAt: new Date().toISOString(),
-    }
-    await storageService.saveAccount(updatedToAccount)
   }
 
   // Delete transaction
@@ -333,13 +260,18 @@ export async function deleteTransaction(
 
 /**
  * Update editable fields of a transaction.
- * If fromAccountId or toAccountId change, the old balance changes are reversed
- * and new balance changes are applied.
+ * Balances are derived from transactions, so moving it to other accounts
+ * needs no balance bookkeeping — only that the new accounts exist.
  */
 export async function updateTransaction(
   id: string,
   updates: UpdateTransactionDto
-): Promise<Result<Transaction, NotFoundError | StorageError>> {
+): Promise<
+  Result<
+    Transaction,
+    NotFoundError | StorageError | ValidationError | BusinessRuleError
+  >
+> {
   const transactionResult = await storageService.getTransaction(id)
 
   if (!transactionResult.success) {
@@ -352,73 +284,37 @@ export async function updateTransaction(
   const original = transactionResult.data
   const newFromAccountId = updates.fromAccountId ?? original.fromAccountId
   const newToAccountId = updates.toAccountId ?? original.toAccountId
+  const newAmount = updates.amount ?? original.amount
   const accountsChanged =
     newFromAccountId !== original.fromAccountId ||
     newToAccountId !== original.toAccountId
 
-  if (accountsChanged) {
-    // Reverse original balance changes
-    const oldFromResult = await accountService.getAccount(
-      original.fromAccountId
-    )
-    const oldToResult = await accountService.getAccount(original.toAccountId)
-
-    if (oldFromResult.success) {
-      await storageService.saveAccount({
-        ...oldFromResult.data,
-        balance: oldFromResult.data.balance + original.amount,
-        updatedAt: new Date().toISOString(),
-      })
+  if (
+    updates.amount !== undefined &&
+    (!Number.isInteger(newAmount) || newAmount <= 0)
+  ) {
+    return {
+      success: false,
+      error: {
+        field: 'amount',
+        message: 'Amount must be greater than 0',
+        code: 'INVALID_AMOUNT',
+      },
     }
-    if (oldToResult.success) {
-      await storageService.saveAccount({
-        ...oldToResult.data,
-        balance: oldToResult.data.balance - original.amount,
-        updatedAt: new Date().toISOString(),
-      })
-    }
+  }
 
-    // Apply new balance changes
-    const newFromResult = await accountService.getAccount(newFromAccountId)
-    const newToResult = await accountService.getAccount(newToAccountId)
-
-    if (!newFromResult.success) {
-      // Rollback: re-apply original changes
-      if (oldFromResult.success) {
-        await storageService.saveAccount({
-          ...oldFromResult.data,
-          balance: oldFromResult.data.balance - original.amount,
-          updatedAt: new Date().toISOString(),
-        })
-      }
-      if (oldToResult.success) {
-        await storageService.saveAccount({
-          ...oldToResult.data,
-          balance: oldToResult.data.balance + original.amount,
-          updatedAt: new Date().toISOString(),
-        })
-      }
+  if (accountsChanged || newAmount !== original.amount) {
+    const [newFrom, newTo] = await Promise.all([
+      accountService.getAccount(newFromAccountId),
+      accountService.getAccount(newToAccountId),
+    ])
+    if (!newFrom.success) {
       return {
         success: false,
         error: { code: 'STORAGE_ERROR', message: 'Source account not found' },
       }
     }
-    if (!newToResult.success) {
-      // Rollback
-      if (oldFromResult.success) {
-        await storageService.saveAccount({
-          ...oldFromResult.data,
-          balance: oldFromResult.data.balance - original.amount,
-          updatedAt: new Date().toISOString(),
-        })
-      }
-      if (oldToResult.success) {
-        await storageService.saveAccount({
-          ...oldToResult.data,
-          balance: oldToResult.data.balance + original.amount,
-          updatedAt: new Date().toISOString(),
-        })
-      }
+    if (!newTo.success) {
       return {
         success: false,
         error: {
@@ -428,22 +324,28 @@ export async function updateTransaction(
       }
     }
 
-    await storageService.saveAccount({
-      ...newFromResult.data,
-      balance: newFromResult.data.balance - original.amount,
-      updatedAt: new Date().toISOString(),
-    })
-    await storageService.saveAccount({
-      ...newToResult.data,
-      balance: newToResult.data.balance + original.amount,
-      updatedAt: new Date().toISOString(),
-    })
+    // Same rule as recording: an asset can't pay out more than it holds.
+    // Its balance already reflects this transaction, so add that back first.
+    const fromAccount = newFrom.data
+    const available =
+      fromAccount.balance +
+      (fromAccount.id === original.fromAccountId ? original.amount : 0)
+    if (fromAccount.type === 'asset' && available < newAmount) {
+      return {
+        success: false,
+        error: {
+          message: 'Insufficient balance in source account',
+          code: 'INSUFFICIENT_BALANCE',
+        },
+      }
+    }
   }
 
   const updated: Transaction = {
     ...original,
     fromAccountId: newFromAccountId,
     toAccountId: newToAccountId,
+    amount: newAmount,
     ...(updates.description !== undefined && {
       description: updates.description,
     }),

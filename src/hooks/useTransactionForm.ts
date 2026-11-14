@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { suggestCategories } from '@/constants/categories'
-import { formatCurrency } from '@/utils/currencyUtils'
+import { formatCurrency, parseCurrency } from '@/utils/currencyUtils'
 import type { CreateTransactionDto } from '@/types/transaction'
 import type { Account } from '@/types/account'
+import { formatDate } from '@/utils/dateUtils'
 
 export type EntryMode = 'expense' | 'income' | 'transfer'
 
@@ -132,7 +133,7 @@ export function useTransactionForm({
   const [secondaryAccountId, setSecondaryAccountId] = useState('')
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(formatDate(new Date()))
   const [category, setCategory] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -146,7 +147,7 @@ export function useTransactionForm({
       setSecondaryAccountId(defaultToAccountId || '')
       setAmount('')
       setDescription('')
-      setDate(new Date().toISOString().split('T')[0])
+      setDate(formatDate(new Date()))
       setCategory('')
       setError(null)
       setSuggestedCategories([])
@@ -193,7 +194,7 @@ export function useTransactionForm({
       setSecondaryAccountId('')
       setAmount('')
       setDescription('')
-      setDate(new Date().toISOString().split('T')[0])
+      setDate(formatDate(new Date()))
       setCategory('')
       setError(null)
       setSuggestedCategories([])
@@ -203,7 +204,7 @@ export function useTransactionForm({
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const value = e.target.value
-    if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
+    if (value === '' || /^[\d,]*\.?\d{0,2}$/.test(value)) {
       setAmount(value)
     }
   }
@@ -214,9 +215,9 @@ export function useTransactionForm({
     setSubmitting(true)
 
     try {
-      const amountInCents = Math.round(parseFloat(amount) * 100)
+      const amountInCents = parseCurrency(amount)
 
-      if (isNaN(amountInCents) || amountInCents <= 0) {
+      if (amountInCents === null || amountInCents <= 0) {
         setError('Please enter a valid amount greater than 0')
         setSubmitting(false)
         return

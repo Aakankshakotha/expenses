@@ -2,6 +2,16 @@ import type { Budget, CreateBudgetDto, UpdateBudgetDto } from '@/types/budget'
 import * as storageService from './storageService'
 import * as transactionService from './transactionService'
 import { listAllCategories } from './categoryService'
+import {
+  startOfWeek,
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  startOfYear,
+  endOfYear,
+} from 'date-fns'
+import { formatDate } from '@/utils/dateUtils'
+import type { BudgetPeriod } from '@/types/budget'
 
 function uuid(): string {
   return crypto.randomUUID()
@@ -15,6 +25,32 @@ export interface BudgetWithSpending extends Budget {
   remaining: number // Budget amount - spent
   percentUsed: number // (spent / amount) * 100
   isOverBudget: boolean // spent > amount
+}
+
+/**
+ * Current period for a budget as local YYYY-MM-DD strings (weeks start Monday)
+ */
+export function getBudgetPeriodRange(
+  period: BudgetPeriod,
+  today: Date = new Date()
+): { startDate: string; endDate: string } {
+  switch (period) {
+    case 'weekly':
+      return {
+        startDate: formatDate(startOfWeek(today, { weekStartsOn: 1 })),
+        endDate: formatDate(endOfWeek(today, { weekStartsOn: 1 })),
+      }
+    case 'monthly':
+      return {
+        startDate: formatDate(startOfMonth(today)),
+        endDate: formatDate(endOfMonth(today)),
+      }
+    case 'yearly':
+      return {
+        startDate: formatDate(startOfYear(today)),
+        endDate: formatDate(endOfYear(today)),
+      }
+  }
 }
 
 export async function listBudgets(): Promise<Budget[]> {
@@ -116,29 +152,9 @@ async function resolveBudgetCategoryId(
 export async function getBudgetWithSpending(
   budget: Budget
 ): Promise<BudgetWithSpending> {
-  // Calculate date range based on budget period
-  const today = new Date()
-  let startDate: Date
-  let endDate = new Date()
-
-  switch (budget.period) {
-    case 'weekly':
-      // Start of current week (Monday)
-      startDate = new Date(today)
-      startDate.setDate(today.getDate() - today.getDay() + 1)
-      break
-    case 'monthly':
-      // Start of current month
-      startDate = new Date(today.getFullYear(), today.getMonth(), 1)
-      break
-    case 'yearly':
-      // Start of current year
-      startDate = new Date(today.getFullYear(), 0, 1)
-      break
-  }
-
-  const startDateStr = startDate.toISOString().split('T')[0]
-  const endDateStr = endDate.toISOString().split('T')[0]
+  const { startDate: startDateStr, endDate: endDateStr } = getBudgetPeriodRange(
+    budget.period
+  )
 
   const resolvedCategoryId = await resolveBudgetCategoryId(budget.category)
   const spent = resolvedCategoryId

@@ -67,6 +67,7 @@ export interface CreateTransactionDto {
  * DTO for updating an existing transaction
  */
 export interface UpdateTransactionDto {
+  amount?: number // In paise, positive integer
   description?: string
   date?: string
   category?: string

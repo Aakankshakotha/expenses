@@ -29,8 +29,9 @@ import * as budgetService from '@/services/budgetService'
 import * as transactionService from '@/services/transactionService'
 import * as accountService from '@/services/accountService'
 import { listAllCategories } from '@/services/categoryService'
-import { dollarsToCents } from '@/utils/currencyUtils'
+import { centsToDollars, dollarsToCents } from '@/utils/currencyUtils'
 import { formatCurrency } from '@/utils/currencyUtils'
+import { formatDate } from '@/utils/dateUtils'
 
 const PERIOD_LABELS: Record<BudgetPeriod, string> = {
   monthly: 'Monthly',
@@ -54,7 +55,7 @@ const BudgetForm: React.FC<BudgetFormProps> = ({
   onClose,
   onSave,
 }) => {
-  const today = new Date().toISOString().split('T')[0]
+  const today = formatDate(new Date())
 
   const [category, setCategory] = useState('')
   const [amount, setAmount] = useState('')
@@ -66,7 +67,7 @@ const BudgetForm: React.FC<BudgetFormProps> = ({
   useEffect(() => {
     if (open) {
       setCategory(editing?.category ?? '')
-      setAmount(editing ? String(editing.amount) : '')
+      setAmount(editing ? String(centsToDollars(editing.amount)) : '')
       setPeriod(editing?.period ?? 'monthly')
       setStartDate(editing?.startDate ?? today)
       setError(null)
@@ -423,19 +424,9 @@ const Budgets: React.FC = () => {
 
   // Calculate how much was spent for a budget this period
   const calcSpent = (budget: Budget): number => {
-    const now = new Date()
-
-    let periodStart: Date
-    if (budget.period === 'monthly') {
-      periodStart = new Date(now.getFullYear(), now.getMonth(), 1)
-    } else if (budget.period === 'weekly') {
-      const day = now.getDay()
-      periodStart = new Date(now)
-      periodStart.setDate(now.getDate() - day)
-      periodStart.setHours(0, 0, 0, 0)
-    } else {
-      periodStart = new Date(now.getFullYear(), 0, 1)
-    }
+    const { startDate, endDate } = budgetService.getBudgetPeriodRange(
+      budget.period
+    )
 
     const directId = categoryById.has(budget.category) ? budget.category : null
     const legacyMatch = directId
@@ -450,7 +441,9 @@ const Budgets: React.FC = () => {
     return transactions
       .filter(
         (txn) =>
-          txn.category === categoryId && new Date(txn.date) >= periodStart
+          txn.category === categoryId &&
+          txn.date >= startDate &&
+          txn.date <= endDate
       )
       .reduce((sum, txn) => sum + txn.amount, 0)
   }

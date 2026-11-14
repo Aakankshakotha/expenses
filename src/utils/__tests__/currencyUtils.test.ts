@@ -3,6 +3,7 @@ import {
   dollarsToCents,
   centsToDollars,
   formatCurrency,
+  parseCurrency,
 } from '../currencyUtils'
 
 describe('currencyUtils', () => {
@@ -113,6 +114,26 @@ describe('currencyUtils', () => {
         // Should be equal within floating point tolerance
         expect(Math.abs(backToDollars - dollars)).toBeLessThan(0.001)
       })
+    })
+  })
+
+  describe('parseCurrency', () => {
+    it('parses Indian-grouped amounts with commas and ₹', () => {
+      expect(parseCurrency('1,500')).toBe(150000)
+      expect(parseCurrency('₹1,23,456.78')).toBe(12345678)
+    })
+
+    it('rejects partially numeric input instead of truncating it', () => {
+      expect(parseCurrency('12abc')).toBeNull()
+      expect(parseCurrency('1.2.3')).toBeNull()
+      expect(parseCurrency('')).toBeNull()
+      expect(parseCurrency('.')).toBeNull()
+    })
+
+    it('accepts plain and fractional values', () => {
+      expect(parseCurrency('99')).toBe(9900)
+      expect(parseCurrency('.5')).toBe(50)
+      expect(parseCurrency('10.')).toBe(1000)
     })
   })
 })

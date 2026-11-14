@@ -18,6 +18,7 @@ import { formatCurrency } from '@/utils/currencyUtils'
 import { getCategoryById } from '@/constants/categories'
 import type { Account } from '@/types/account'
 import type { TransactionWithAccounts } from '@/types/transaction'
+import { formatDate } from '@/utils/dateUtils'
 
 interface AccountTransactionsViewProps {
   account: Account
@@ -210,7 +211,7 @@ export const AccountTransactionsView: React.FC<
     return { value: txn.amount, isCredit: false }
   }
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = formatDate(new Date())
 
   return (
     <Box sx={{ maxWidth: 640, mx: 'auto', pb: 4 }}>

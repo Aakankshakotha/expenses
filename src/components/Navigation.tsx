@@ -16,6 +16,7 @@ import RepeatOutlinedIcon from '@mui/icons-material/RepeatOutlined'
 import ShowChartIcon from '@mui/icons-material/ShowChart'
 import PieChartOutlineOutlinedIcon from '@mui/icons-material/PieChartOutlineOutlined'
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined'
+import BackupOutlinedIcon from '@mui/icons-material/BackupOutlined'
 
 const NAV_LINKS = [
   { href: '/', label: 'Dashboard', Icon: GridViewOutlinedIcon, exact: true },
@@ -47,6 +48,12 @@ const NAV_LINKS = [
     href: '/categories',
     label: 'Categories',
     Icon: CategoryOutlinedIcon,
+    exact: false,
+  },
+  {
+    href: '/settings',
+    label: 'Backup',
+    Icon: BackupOutlinedIcon,
     exact: false,
   },
 ]

@@ -14,6 +14,7 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
+import { formatDate } from '@/utils/dateUtils'
 
 /**
  * Recurring page - manage recurring transactions
@@ -89,7 +90,7 @@ const Recurring: React.FC = () => {
       return
     }
 
-    const today = new Date().toISOString().split('T')[0]
+    const today = formatDate(new Date())
     const result = await recurringService.processRecurring(id, today)
 
     if (!result.success) {

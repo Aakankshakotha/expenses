@@ -1,3 +1,5 @@
+import { parseISO, addDays, addWeeks, addMonths, addYears } from 'date-fns'
+import { formatDate } from '@/utils/dateUtils'
 import * as storageService from './storageService'
 import * as transactionService from './transactionService'
 import type {
@@ -66,24 +68,16 @@ function calculateNextProcessDate(
 ): string | undefined {
   if (!lastProcessedDate) return undefined
 
-  const date = new Date(lastProcessedDate)
+  // parseISO reads YYYY-MM-DD as local midnight; addMonths clamps Jan 31 → Feb 28
+  const date = parseISO(lastProcessedDate)
+  const next = {
+    daily: () => addDays(date, 1),
+    weekly: () => addWeeks(date, 1),
+    monthly: () => addMonths(date, 1),
+    yearly: () => addYears(date, 1),
+  }[frequency]()
 
-  switch (frequency) {
-    case 'daily':
-      date.setDate(date.getDate() + 1)
-      break
-    case 'weekly':
-      date.setDate(date.getDate() + 7)
-      break
-    case 'monthly':
-      date.setMonth(date.getMonth() + 1)
-      break
-    case 'yearly':
-      date.setFullYear(date.getFullYear() + 1)
-      break
-  }
-
-  return date.toISOString().split('T')[0]
+  return formatDate(next)
 }
 
 /**
@@ -95,22 +89,12 @@ function shouldProcess(
 ): boolean {
   if (!recurring.lastProcessedDate) return true
 
-  const lastDate = new Date(recurring.lastProcessedDate)
-  const current = new Date(currentDate)
-  const daysDiff = Math.floor(
-    (current.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24)
+  // Due on the same calendar date next period (rent on the 5th stays on the 5th)
+  const nextDate = calculateNextProcessDate(
+    recurring.lastProcessedDate,
+    recurring.frequency
   )
-
-  switch (recurring.frequency) {
-    case 'daily':
-      return daysDiff >= 1
-    case 'weekly':
-      return daysDiff >= 7
-    case 'monthly':
-      return daysDiff >= 28 // Conservative estimate
-    case 'yearly':
-      return daysDiff >= 365
-  }
+  return nextDate !== undefined && currentDate >= nextDate
 }
 
 /**
@@ -398,4 +382,60 @@ export async function shouldProcessRecurring(
       daysSinceLastProcess,
     },
   }
+}
+
+/** One occurrence posted (or attempted) by the catch-up run */
+export interface CatchUpEntry {
+  recurringId: string
+  description: string
+  amount: number // In paise
+  date: string // YYYY-MM-DD the occurrence was due
+  message?: string // Why it failed, for failed entries
+}
+
+export interface CatchUpResult {
+  posted: CatchUpEntry[]
+  failed: CatchUpEntry[]
+}
+
+// A daily entry left untouched for over a year stops here; the rest posts next open
+const MAX_CATCH_UP_PER_ENTRY = 366
+
+/**
+ * Post every occurrence that came due up to `today`, each dated when it was due.
+ * Only entries that have been processed at least once are caught up — there is
+ * no start date, so the first posting stays a deliberate "Process now".
+ * An entry stops at its first failure (e.g. insufficient balance) so later
+ * occurrences never post ahead of a missing one.
+ */
+export async function processDueRecurring(
+  today: string
+): Promise<CatchUpResult> {
+  const result: CatchUpResult = { posted: [], failed: [] }
+  const listed = await listRecurring({ status: 'active' })
+  const active = listed.success ? listed.data : []
+
+  for (const recurring of active) {
+    let last = recurring.lastProcessedDate
+    for (let i = 0; last && i < MAX_CATCH_UP_PER_ENTRY; i++) {
+      const due = calculateNextProcessDate(last, recurring.frequency)
+      if (!due || due > today) break
+
+      const entry: CatchUpEntry = {
+        recurringId: recurring.id,
+        description: recurring.description,
+        amount: recurring.amount,
+        date: due,
+      }
+      const processed = await processRecurring(recurring.id, due)
+      if (!processed.success) {
+        result.failed.push({ ...entry, message: processed.error.message })
+        break
+      }
+      result.posted.push(entry)
+      last = due
+    }
+  }
+
+  return result
 }

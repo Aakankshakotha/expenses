@@ -409,6 +409,46 @@ describe('recurringService', () => {
   })
 
   describe('shouldProcessRecurring', () => {
+    it('is not due for monthly until the same date next month', async () => {
+      vi.mocked(storageService.getRecurringTransactions).mockResolvedValue({
+        success: true,
+        data: [
+          {
+            ...mockRecurring,
+            frequency: 'monthly' as const,
+            lastProcessedDate: '2026-01-05',
+          },
+        ],
+      })
+
+      // 28 days later used to count as "due" — rent would post ~13 times a year
+      const early = await shouldProcessRecurring(mockRecurring.id, '2026-02-02')
+      const onTime = await shouldProcessRecurring(mockRecurring.id, '2026-02-05')
+
+      expect(early.success && early.data.needsProcessing).toBe(false)
+      expect(onTime.success && onTime.data.needsProcessing).toBe(true)
+    })
+
+    it('clamps monthly next date to month end and keeps local dates', async () => {
+      vi.mocked(storageService.getRecurringTransactions).mockResolvedValue({
+        success: true,
+        data: [
+          {
+            ...mockRecurring,
+            frequency: 'monthly' as const,
+            lastProcessedDate: '2026-01-31',
+          },
+        ],
+      })
+
+      const result = await shouldProcessRecurring(mockRecurring.id, '2026-02-01')
+
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.nextProcessDate).toBe('2026-02-28')
+      }
+    })
+
     it('should indicate processing needed for daily frequency', async () => {
       const dailyRecurring = {
         ...mockRecurring,

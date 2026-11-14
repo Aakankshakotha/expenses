@@ -1,8 +1,11 @@
 import type { Result } from '@/types/common'
 import type { Account } from '@/types/account'
+import type { Budget } from '@/types/budget'
 import type { Transaction } from '@/types/transaction'
+import type { TransactionCategory } from '@/types/transaction'
 import type { RecurringTransaction } from '@/types/recurring'
 import type { NetWorthSnapshot } from '@/types/netWorth'
+import { netEffectsByAccount } from '@/utils/balanceUtils'
 import {
   isValidUUID,
   isValidAmount,
@@ -18,6 +21,8 @@ import {
  */
 const STORAGE_KEYS = {
   ACCOUNTS: 'moneyflow_accounts',
+  BUDGETS: 'moneyflow_budgets',
+  CATEGORIES: 'moneyflow_categories',
   RECURRING: 'moneyflow_recurring',
   VERSION: 'moneyflow_version',
   // Partitioned keys — dynamic suffixes _YYYY_MM / _YYYY
@@ -38,7 +43,16 @@ export interface ExportData {
   transactions: Transaction[]
   recurring: RecurringTransaction[]
   netWorthSnapshots: NetWorthSnapshot[]
+  // Optional so backups made before these were included still import
+  budgets?: Budget[]
+  categories?: TransactionCategory[]
 }
+
+/**
+ * Persisted account shape. Balances are derived from transactions, so only the
+ * opening balance is stored — a balance can never drift from its transactions.
+ */
+type StoredAccount = Omit<Account, 'balance'> & { openingBalance: number }
 
 /**
  * Storage container for each entity type
@@ -62,8 +76,13 @@ export class StorageService {
     Result<Account[], { type: 'StorageError'; message: string }>
   > {
     try {
-      const container = this.getContainer<Account>(STORAGE_KEYS.ACCOUNTS)
-      return { success: true, data: container.data }
+      const stored = this.readStoredAccounts()
+      const effects = netEffectsByAccount(this.readAllTransactions(), stored)
+      const accounts = stored.map(({ openingBalance, ...account }) => ({
+        ...account,
+        balance: openingBalance + (effects.get(account.id) ?? 0),
+      }))
+      return { success: true, data: accounts }
     } catch (error) {
       return {
         success: false,
@@ -127,15 +146,25 @@ export class StorageService {
     }
 
     try {
-      const accountsResult = await this.getAccounts()
-      const accounts = accountsResult.success ? accountsResult.data : []
+      const accounts = this.readStoredAccounts()
 
-      // Update or add account
+      // Setting a balance means "it's this much today": store the opening
+      // balance that produces it given the existing transactions
+      const effect =
+        netEffectsByAccount(this.readAllTransactions(), [account]).get(
+          account.id
+        ) ?? 0
+      const { balance, ...rest } = account
+      const stored: StoredAccount = {
+        ...rest,
+        openingBalance: balance - effect,
+      }
+
       const existingIndex = accounts.findIndex((a) => a.id === account.id)
       if (existingIndex >= 0) {
-        accounts[existingIndex] = account
+        accounts[existingIndex] = stored
       } else {
-        accounts.push(account)
+        accounts.push(stored)
       }
 
       this.setContainer(STORAGE_KEYS.ACCOUNTS, accounts)
@@ -159,18 +188,7 @@ export class StorageService {
     Result<void, { type: 'NotFoundError' | 'StorageError'; message: string }>
   > {
     try {
-      const accountsResult = await this.getAccounts()
-      if (!accountsResult.success) {
-        return {
-          success: false,
-          error: {
-            type: 'StorageError',
-            message: 'Failed to retrieve accounts',
-          },
-        }
-      }
-
-      const accounts = accountsResult.data
+      const accounts = this.readStoredAccounts()
       const existingIndex = accounts.findIndex((a) => a.id === id)
 
       if (existingIndex === -1) {
@@ -208,14 +226,7 @@ export class StorageService {
     Result<Transaction[], { type: 'StorageError'; message: string }>
   > {
     try {
-      this.migrateTransactionsIfNeeded()
-      const keys = this.getAllTransactionPartitionKeys()
-      const all: Transaction[] = []
-      for (const key of keys) {
-        const container = this.getContainer<Transaction>(key)
-        all.push(...container.data)
-      }
-      return { success: true, data: all }
+      return { success: true, data: this.readAllTransactions() }
     } catch (error) {
       return {
         success: false,
@@ -278,7 +289,24 @@ export class StorageService {
     }
 
     try {
+      // Accounts must be on opening balances before the transaction set changes
+      this.readStoredAccounts()
+
       const partitionKey = this.getTransactionPartitionKey(transaction.date)
+
+      // A date edit can move a transaction to another month — drop the old copy
+      // so it isn't counted twice
+      for (const key of this.getAllTransactionPartitionKeys()) {
+        if (key === partitionKey) continue
+        const other = this.getContainer<Transaction>(key).data
+        if (other.some((t) => t.id === transaction.id)) {
+          this.setContainer(
+            key,
+            other.filter((t) => t.id !== transaction.id)
+          )
+        }
+      }
+
       const container = this.getContainer<Transaction>(partitionKey)
       const transactions = [...container.data]
       const existingIndex = transactions.findIndex(
@@ -311,6 +339,9 @@ export class StorageService {
     Result<void, { type: 'NotFoundError' | 'StorageError'; message: string }>
   > {
     try {
+      // Accounts must be on opening balances before the transaction set changes
+      this.readStoredAccounts()
+
       const keys = this.getAllTransactionPartitionKeys()
       for (const key of keys) {
         const container = this.getContainer<Transaction>(key)
@@ -569,6 +600,147 @@ export class StorageService {
     }
   }
 
+  async getBudgets(): Promise<
+    Result<Budget[], { type: 'StorageError'; message: string }>
+  > {
+    try {
+      return {
+        success: true,
+        data: this.getContainer<Budget>(STORAGE_KEYS.BUDGETS).data,
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: {
+          type: 'StorageError',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Failed to retrieve budgets',
+        },
+      }
+    }
+  }
+
+  async saveBudget(
+    budget: Budget
+  ): Promise<Result<Budget, { type: 'StorageError'; message: string }>> {
+    try {
+      const result = await this.getBudgets()
+      const budgets = result.success ? result.data : []
+      const index = budgets.findIndex((item) => item.id === budget.id)
+      if (index >= 0) budgets[index] = budget
+      else budgets.push(budget)
+      this.setContainer(STORAGE_KEYS.BUDGETS, budgets)
+      return { success: true, data: budget }
+    } catch (error) {
+      return {
+        success: false,
+        error: {
+          type: 'StorageError',
+          message:
+            error instanceof Error ? error.message : 'Failed to save budget',
+        },
+      }
+    }
+  }
+
+  async deleteBudget(
+    id: string
+  ): Promise<Result<void, { type: 'StorageError'; message: string }>> {
+    try {
+      const result = await this.getBudgets()
+      const budgets = result.success ? result.data : []
+      this.setContainer(
+        STORAGE_KEYS.BUDGETS,
+        budgets.filter((item) => item.id !== id)
+      )
+      return { success: true, data: undefined }
+    } catch (error) {
+      return {
+        success: false,
+        error: {
+          type: 'StorageError',
+          message:
+            error instanceof Error ? error.message : 'Failed to delete budget',
+        },
+      }
+    }
+  }
+
+  async getCategories(): Promise<
+    Result<TransactionCategory[], { type: 'StorageError'; message: string }>
+  > {
+    try {
+      return {
+        success: true,
+        data: this.getContainer<TransactionCategory>(STORAGE_KEYS.CATEGORIES)
+          .data,
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: {
+          type: 'StorageError',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Failed to retrieve categories',
+        },
+      }
+    }
+  }
+
+  async saveCategory(
+    category: TransactionCategory
+  ): Promise<
+    Result<TransactionCategory, { type: 'StorageError'; message: string }>
+  > {
+    try {
+      const result = await this.getCategories()
+      const categories = result.success ? result.data : []
+      const index = categories.findIndex((item) => item.id === category.id)
+      if (index >= 0) categories[index] = category
+      else categories.push(category)
+      this.setContainer(STORAGE_KEYS.CATEGORIES, categories)
+      return { success: true, data: category }
+    } catch (error) {
+      return {
+        success: false,
+        error: {
+          type: 'StorageError',
+          message:
+            error instanceof Error ? error.message : 'Failed to save category',
+        },
+      }
+    }
+  }
+
+  async deleteCategory(
+    id: string
+  ): Promise<Result<void, { type: 'StorageError'; message: string }>> {
+    try {
+      const result = await this.getCategories()
+      const categories = result.success ? result.data : []
+      this.setContainer(
+        STORAGE_KEYS.CATEGORIES,
+        categories.filter((item) => item.id !== id)
+      )
+      return { success: true, data: undefined }
+    } catch (error) {
+      return {
+        success: false,
+        error: {
+          type: 'StorageError',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Failed to delete category',
+        },
+      }
+    }
+  }
+
   /**
    * Bulk Operations
    */
@@ -581,6 +753,8 @@ export class StorageService {
       const transactionsResult = await this.getTransactions()
       const recurringResult = await this.getRecurringTransactions()
       const snapshotsResult = await this.getNetWorthSnapshots()
+      const budgetsResult = await this.getBudgets()
+      const categoriesResult = await this.getCategories()
 
       const exportData: ExportData = {
         version: this.version,
@@ -589,6 +763,8 @@ export class StorageService {
         transactions: transactionsResult.success ? transactionsResult.data : [],
         recurring: recurringResult.success ? recurringResult.data : [],
         netWorthSnapshots: snapshotsResult.success ? snapshotsResult.data : [],
+        budgets: budgetsResult.success ? budgetsResult.data : [],
+        categories: categoriesResult.success ? categoriesResult.data : [],
       }
 
       return { success: true, data: exportData }
@@ -683,32 +859,42 @@ export class StorageService {
         }
       }
 
-      // Clear existing data and import new data
-      await this.clearAllData()
-
-      this.setContainer(STORAGE_KEYS.ACCOUNTS, data.accounts)
-      this.setContainer(STORAGE_KEYS.RECURRING, data.recurring)
-
-      // Import transactions grouped by month
-      const txByMonth: Record<string, Transaction[]> = {}
-      for (const tx of data.transactions) {
-        const key = this.getTransactionPartitionKey(tx.date)
-        if (!txByMonth[key]) txByMonth[key] = []
-        txByMonth[key].push(tx)
-      }
-      for (const [key, txs] of Object.entries(txByMonth)) {
-        this.setContainer(key, txs)
+      for (const budget of data.budgets ?? []) {
+        const error = this.validateBudget(budget)
+        if (error) {
+          return {
+            success: false,
+            error: {
+              type: 'ValidationError',
+              message: `Invalid budget data: ${error}`,
+            },
+          }
+        }
       }
 
-      // Import net worth snapshots grouped by year
-      const nwByYear: Record<string, NetWorthSnapshot[]> = {}
-      for (const snap of data.netWorthSnapshots) {
-        const key = this.getNetWorthPartitionKey(snap.date)
-        if (!nwByYear[key]) nwByYear[key] = []
-        nwByYear[key].push(snap)
+      for (const category of data.categories ?? []) {
+        if (
+          typeof category?.id !== 'string' ||
+          typeof category?.name !== 'string'
+        ) {
+          return {
+            success: false,
+            error: {
+              type: 'ValidationError',
+              message: 'Invalid category data: missing id or name',
+            },
+          }
+        }
       }
-      for (const [key, snaps] of Object.entries(nwByYear)) {
-        this.setContainer(key, snaps)
+
+      // Keep a copy of current data so a failed write (e.g. quota) can't leave it wiped
+      const previous = this.snapshotAppData()
+      try {
+        await this.clearAllData()
+        this.writeImportedData(data)
+      } catch (error) {
+        this.restoreAppData(previous)
+        throw error
       }
 
       return { success: true, data: undefined }
@@ -724,11 +910,63 @@ export class StorageService {
     }
   }
 
+  private writeImportedData(data: ExportData): void {
+    this.setContainer(STORAGE_KEYS.ACCOUNTS, data.accounts)
+    this.setContainer(STORAGE_KEYS.RECURRING, data.recurring)
+    this.setContainer(STORAGE_KEYS.BUDGETS, data.budgets ?? [])
+    this.setContainer(STORAGE_KEYS.CATEGORIES, data.categories ?? [])
+
+    // Import transactions grouped by month
+    const txByMonth: Record<string, Transaction[]> = {}
+    for (const tx of data.transactions) {
+      const key = this.getTransactionPartitionKey(tx.date)
+      if (!txByMonth[key]) txByMonth[key] = []
+      txByMonth[key].push(tx)
+    }
+    for (const [key, txs] of Object.entries(txByMonth)) {
+      this.setContainer(key, txs)
+    }
+
+    // Import net worth snapshots grouped by year
+    const nwByYear: Record<string, NetWorthSnapshot[]> = {}
+    for (const snap of data.netWorthSnapshots) {
+      const key = this.getNetWorthPartitionKey(snap.date)
+      if (!nwByYear[key]) nwByYear[key] = []
+      nwByYear[key].push(snap)
+    }
+    for (const [key, snaps] of Object.entries(nwByYear)) {
+      this.setContainer(key, snaps)
+    }
+  }
+
+  /** All of this app's localStorage entries, keyed by storage key */
+  private snapshotAppData(): Record<string, string> {
+    const snapshot: Record<string, string> = {}
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key?.startsWith('moneyflow_')) {
+        snapshot[key] = localStorage.getItem(key) ?? ''
+      }
+    }
+    return snapshot
+  }
+
+  private restoreAppData(snapshot: Record<string, string>): void {
+    for (const key of Object.keys(this.snapshotAppData())) {
+      localStorage.removeItem(key)
+    }
+    for (const [key, value] of Object.entries(snapshot)) {
+      localStorage.setItem(key, value)
+    }
+  }
+
   async clearAllData(): Promise<
     Result<void, { type: 'StorageError'; message: string }>
   > {
     try {
       localStorage.removeItem(STORAGE_KEYS.ACCOUNTS)
+      localStorage.removeItem(STORAGE_KEYS.BUDGETS)
+      localStorage.removeItem(STORAGE_KEYS.CATEGORIES)
       localStorage.removeItem(STORAGE_KEYS.RECURRING)
       // Remove all transaction month partitions
       for (const key of this.getAllTransactionPartitionKeys()) {
@@ -757,6 +995,39 @@ export class StorageService {
   /**
    * Private Helper Methods
    */
+
+  private readAllTransactions(): Transaction[] {
+    this.migrateTransactionsIfNeeded()
+    const all: Transaction[] = []
+    for (const key of this.getAllTransactionPartitionKeys()) {
+      all.push(...this.getContainer<Transaction>(key).data)
+    }
+    return all
+  }
+
+  /**
+   * Stored accounts, converting any that still hold a running `balance`
+   * (written before balances were derived, or imported from a backup).
+   * Their opening balance is backed out from the current transactions,
+   * so every balance reads exactly as it did before conversion.
+   */
+  private readStoredAccounts(): StoredAccount[] {
+    const raw = this.getContainer<StoredAccount | Account>(
+      STORAGE_KEYS.ACCOUNTS
+    ).data
+    const isStored = (a: StoredAccount | Account): a is StoredAccount =>
+      'openingBalance' in a
+    if (raw.every(isStored)) return raw
+
+    const effects = netEffectsByAccount(this.readAllTransactions(), raw)
+    const converted = raw.map((a): StoredAccount => {
+      if (isStored(a)) return a
+      const { balance, ...rest } = a
+      return { ...rest, openingBalance: balance - (effects.get(a.id) ?? 0) }
+    })
+    this.setContainer(STORAGE_KEYS.ACCOUNTS, converted)
+    return converted
+  }
 
   private getContainer<T>(key: string): StorageContainer<T> {
     try {
@@ -973,6 +1244,18 @@ export class StorageService {
     return null
   }
 
+  private validateBudget(budget: Budget): string | null {
+    if (typeof budget?.id !== 'string') return 'Invalid budget ID'
+    if (typeof budget.category !== 'string') return 'Invalid budget category'
+    if (!isValidAmount(budget.amount) || budget.amount <= 0) {
+      return 'Invalid budget amount'
+    }
+    if (!['weekly', 'monthly', 'yearly'].includes(budget.period)) {
+      return 'Invalid budget period'
+    }
+    return null
+  }
+
   private validateNetWorthSnapshot(snapshot: NetWorthSnapshot): string | null {
     if (!isValidUUID(snapshot.id)) {
       return 'Invalid snapshot ID'
@@ -996,62 +1279,38 @@ export class StorageService {
   }
 }
 
-// ── Drive-backed singleton ────────────────────────────────────────────────────
-// All exported functions delegate to DriveStorageService.
-// Call initializeDriveStorage(accessToken) after the user signs in.
-// Call clearDriveStorage() on sign-out.
+// ── Local storage singleton ───────────────────────────────────────────────────
 
-import { DriveStorageService } from './driveStorageService'
+const storage = new StorageService()
 
-let _drive: DriveStorageService | null = null
-
-export function initializeDriveStorage(): void {
-  // The access token is now managed server-side via HTTP-only cookie.
-  // Just create the singleton if it doesn't already exist.
-  if (!_drive) {
-    _drive = new DriveStorageService()
-  }
-  // Eagerly warm the Drive file-ID cache so the first page load is fast.
-  _drive.preWarm()
-}
-
-export function clearDriveStorage(): void {
-  _drive = null
-}
-
-function svc(): DriveStorageService {
-  if (!_drive) throw new Error('Not authenticated. Please sign in.')
-  return _drive
-}
-
-export const getAccounts = () => svc().getAccounts()
-export const getAccount = (id: string) => svc().getAccount(id)
-export const saveAccount = (account: Account) => svc().saveAccount(account)
-export const deleteAccount = (id: string) => svc().deleteAccount(id)
-export const getTransactions = () => svc().getTransactions()
-export const getTransaction = (id: string) => svc().getTransaction(id)
+export const getAccounts = () => storage.getAccounts()
+export const getAccount = (id: string) => storage.getAccount(id)
+export const saveAccount = (account: Account) => storage.saveAccount(account)
+export const deleteAccount = (id: string) => storage.deleteAccount(id)
+export const getTransactions = () => storage.getTransactions()
+export const getTransaction = (id: string) => storage.getTransaction(id)
 export const saveTransaction = (transaction: Transaction) =>
-  svc().saveTransaction(transaction)
-export const deleteTransaction = (id: string) => svc().deleteTransaction(id)
-export const getRecurringTransactions = () => svc().getRecurringTransactions()
+  storage.saveTransaction(transaction)
+export const deleteTransaction = (id: string) => storage.deleteTransaction(id)
+export const getRecurringTransactions = () => storage.getRecurringTransactions()
 export const getRecurringTransaction = (id: string) =>
-  svc().getRecurringTransaction(id)
+  storage.getRecurringTransaction(id)
 export const saveRecurringTransaction = (recurring: RecurringTransaction) =>
-  svc().saveRecurringTransaction(recurring)
+  storage.saveRecurringTransaction(recurring)
 export const deleteRecurringTransaction = (id: string) =>
-  svc().deleteRecurringTransaction(id)
-export const getNetWorthSnapshots = () => svc().getNetWorthSnapshots()
+  storage.deleteRecurringTransaction(id)
+export const getNetWorthSnapshots = () => storage.getNetWorthSnapshots()
 export const saveNetWorthSnapshot = (snapshot: NetWorthSnapshot) =>
-  svc().saveNetWorthSnapshot(snapshot)
-export const exportData = () => svc().exportData()
-export const importData = (data: ExportData) => svc().importData(data)
-export const clearAllData = () => svc().clearAllData()
-export const getBudgets = () => svc().getBudgets()
+  storage.saveNetWorthSnapshot(snapshot)
+export const exportData = () => storage.exportData()
+export const importData = (data: ExportData) => storage.importData(data)
+export const clearAllData = () => storage.clearAllData()
+export const getBudgets = () => storage.getBudgets()
 export const saveBudget = (budget: import('@/types/budget').Budget) =>
-  svc().saveBudget(budget)
-export const deleteBudget = (id: string) => svc().deleteBudget(id)
-export const getCategories = () => svc().getCategories()
+  storage.saveBudget(budget)
+export const deleteBudget = (id: string) => storage.deleteBudget(id)
+export const getCategories = () => storage.getCategories()
 export const saveCategory = (
   category: import('@/types/transaction').TransactionCategory
-) => svc().saveCategory(category)
-export const deleteCategory = (id: string) => svc().deleteCategory(id)
+) => storage.saveCategory(category)
+export const deleteCategory = (id: string) => storage.deleteCategory(id)

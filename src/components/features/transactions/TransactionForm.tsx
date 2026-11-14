@@ -7,6 +7,7 @@ import { TransactionModeTabs } from './TransactionModeTabs'
 import { TransactionAccountFields } from './TransactionAccountFields'
 import { CategorySuggestions } from './CategorySuggestions'
 import { listAllCategories } from '@/services/categoryService'
+import { parseCurrency } from '@/utils/currencyUtils'
 import type {
   CreateTransactionDto,
   TransactionCategory,
@@ -40,6 +41,7 @@ const EditTransactionForm: React.FC<{
   onClose: () => void
   onUpdate: (id: string, data: UpdateTransactionDto) => Promise<void>
 }> = ({ txn, accounts, onClose, onUpdate }) => {
+  const [amount, setAmount] = useState((txn.amount / 100).toFixed(2))
   const [description, setDescription] = useState(txn.description)
   const [date, setDate] = useState(txn.date)
   const [category, setCategory] = useState(txn.category ?? '')
@@ -50,6 +52,7 @@ const EditTransactionForm: React.FC<{
   const [categories, setCategories] = useState<TransactionCategory[]>([])
 
   useEffect(() => {
+    setAmount((txn.amount / 100).toFixed(2))
     setDescription(txn.description)
     setDate(txn.date)
     setCategory(txn.category ?? '')
@@ -72,12 +75,24 @@ const EditTransactionForm: React.FC<{
 
   const activeAccounts = accounts.filter((a) => a.status === 'active')
 
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.value === '' || /^[\d,]*\.?\d{0,2}$/.test(e.target.value)) {
+      setAmount(e.target.value)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const amountInPaise = parseCurrency(amount)
+    if (amountInPaise === null || amountInPaise <= 0) {
+      setError('Please enter a valid amount greater than 0')
+      return
+    }
     setSubmitting(true)
     setError(null)
     try {
       await onUpdate(txn.id, {
+        amount: amountInPaise,
         description,
         date,
         category: category || undefined,
@@ -149,9 +164,11 @@ const EditTransactionForm: React.FC<{
               <Input
                 label="Amount"
                 type="text"
-                value={(txn.amount / 100).toFixed(2)}
-                onChange={() => {}}
-                disabled
+                inputMode="decimal"
+                value={amount}
+                onChange={handleAmountChange}
+                placeholder="0.00"
+                required
               />
             </Box>
             <Box sx={{ flex: 1 }}>

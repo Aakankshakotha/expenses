@@ -137,7 +137,7 @@ export const useDashboardData = (): UseDashboardDataReturn => {
 
   const thisMonthAssetDelta = netTypeFlow(thisMonthTransactions, 'asset')
   const lastMonthAssetDelta = netTypeFlow(lastMonthTransactions, 'asset')
-  // totalLiabilities = -(sum of liability balances), so negate the raw flow
+  // Liability balances are amounts owed: money flowing out of a liability raises debt, so negate the raw flow
   const thisMonthLiabilityDelta = -netTypeFlow(
     thisMonthTransactions,
     'liability'

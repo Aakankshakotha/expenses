@@ -211,7 +211,7 @@ interface InvestmentSnapshot {
 Services are plain TypeScript classes. They receive a `StorageService` instance (dependency injection pattern) and contain all business logic.
 
 ```
-StorageService          ← raw persistence (localStorage today, Drive/DB tomorrow)
+StorageService          ← raw persistence in browser localStorage
     ↑
 AccountService          ← account CRUD, balance recalculation
 TransactionService      ← transaction CRUD, filtering, pagination
@@ -320,7 +320,7 @@ interface StorageContainer<T> {
 - Device/browser-locked (no cross-device access)
 - No backup
 
-> Planned migration: Google Drive (one JSON file per entity in a `MoneyFlow/` folder per user). The `StorageService` abstraction makes this a clean swap — no other code changes needed.
+Data is stored only in the current browser and device. Use the export/import operations for manual backups or transfers.
 
 ---
 
@@ -372,15 +372,3 @@ No `try/catch` in components — errors surface through the `Result` type.
 Config: `vitest.config.ts`
 
 ---
-
-## 14. Planned: Google Drive Storage Migration
-
-The `StorageService` interface will be replaced by a `DriveStorageService` that:
-
-- Uses Google OAuth2 (`drive.file` scope)
-- Stores one JSON file per entity in `MoneyFlow/` folder in user's Drive
-- Reads: fetch file → parse JSON → return array
-- Writes: stringify → upload/update file via Drive API
-- Each user's data lives in **their own Drive** — app stores nothing server-side
-
-The `Result<T, E>` pattern and all method signatures remain identical — zero changes needed in services, hooks, or components.

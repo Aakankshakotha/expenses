@@ -15,7 +15,7 @@ describe('TransactionService', () => {
   })
 
   describe('recordTransaction', () => {
-    it('should create transaction and update both account balances', async () => {
+    it('should create transaction with a single write', async () => {
       const fromId = crypto.randomUUID()
       const toId = crypto.randomUUID()
 
@@ -76,19 +76,9 @@ describe('TransactionService', () => {
         expect(result.data.description).toBe('Transfer to savings')
       }
 
-      // Verify account balance updates
-      expect(storageService.saveAccount).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: fromId,
-          balance: 80000,
-        })
-      )
-      expect(storageService.saveAccount).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: toId,
-          balance: 70000,
-        })
-      )
+      // One write: balances are derived from transactions, never stored
+      expect(storageService.saveTransaction).toHaveBeenCalledTimes(1)
+      expect(storageService.saveAccount).not.toHaveBeenCalled()
     })
 
     it('should reject negative amounts', async () => {
@@ -337,6 +327,100 @@ describe('TransactionService', () => {
     })
   })
 
+  describe('updateTransaction amount', () => {
+    const now = '2026-11-01T00:00:00.000Z'
+    const account = (type: Account['type'], balance: number): Account => ({
+      id: crypto.randomUUID(),
+      name: type,
+      type,
+      balance,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+    const setup = (from: Account, to: Account, amount: number) => {
+      const txn: Transaction = {
+        id: crypto.randomUUID(),
+        fromAccountId: from.id,
+        toAccountId: to.id,
+        amount,
+        description: 'Groceries',
+        date: '2026-11-05',
+        createdAt: now,
+      }
+      vi.mocked(storageService.getTransaction).mockResolvedValue({
+        success: true,
+        data: txn,
+      })
+      vi.mocked(accountService.getAccount).mockImplementation(async (id) =>
+        id === from.id
+          ? { success: true, data: from }
+          : { success: true, data: to }
+      )
+      vi.mocked(storageService.saveTransaction).mockImplementation(
+        async (t) => ({ success: true, data: t })
+      )
+      return txn
+    }
+
+    it('saves the corrected amount', async () => {
+      // Bank shows ₹500 after a ₹1,500 spend that should have been ₹1,200
+      const txn = setup(
+        account('asset', 50000),
+        account('expense', 150000),
+        150000
+      )
+
+      const result = await transactionService.updateTransaction(txn.id, {
+        amount: 120000,
+      })
+
+      expect(result.success && result.data.amount).toBe(120000)
+      expect(storageService.saveTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({ id: txn.id, amount: 120000 })
+      )
+    })
+
+    it.each([0, -100, 10.5])('rejects amount %s', async (amount) => {
+      const txn = setup(account('asset', 50000), account('expense', 0), 1000)
+
+      const result = await transactionService.updateTransaction(txn.id, {
+        amount,
+      })
+
+      expect(result.success).toBe(false)
+      expect(storageService.saveTransaction).not.toHaveBeenCalled()
+    })
+
+    it('counts the original amount as available when raising it', async () => {
+      // ₹500 left after a ₹1,000 spend → up to ₹1,500 is affordable
+      const txn = setup(account('asset', 50000), account('expense', 0), 100000)
+
+      const ok = await transactionService.updateTransaction(txn.id, {
+        amount: 150000,
+      })
+      const tooMuch = await transactionService.updateTransaction(txn.id, {
+        amount: 150001,
+      })
+
+      expect(ok.success).toBe(true)
+      expect(tooMuch.success).toBe(false)
+      if (!tooMuch.success) {
+        expect(tooMuch.error.code).toBe('INSUFFICIENT_BALANCE')
+      }
+    })
+
+    it('does not limit card spending by balance', async () => {
+      const txn = setup(account('liability', 0), account('expense', 0), 1000)
+
+      const result = await transactionService.updateTransaction(txn.id, {
+        amount: 99999999,
+      })
+
+      expect(result.success).toBe(true)
+    })
+  })
+
   describe('listTransactions', () => {
     it('should return all transactions when no filter provided', async () => {
       const transactions: Transaction[] = [
@@ -508,7 +592,7 @@ describe('TransactionService', () => {
   })
 
   describe('deleteTransaction', () => {
-    it('should delete transaction and reverse balance changes', async () => {
+    it('should delete transaction without writing account balances', async () => {
       const fromId = crypto.randomUUID()
       const toId = crypto.randomUUID()
       const txnId = crypto.randomUUID()
@@ -573,19 +657,8 @@ describe('TransactionService', () => {
 
       expect(result.success).toBe(true)
 
-      // Verify reverse balance updates (add 20000 to from, subtract 20000 from to)
-      expect(storageService.saveAccount).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: fromId,
-          balance: 100000, // 80000 + 20000
-        })
-      )
-      expect(storageService.saveAccount).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: toId,
-          balance: 50000, // 70000 - 20000
-        })
-      )
+      expect(storageService.deleteTransaction).toHaveBeenCalledWith(txnId)
+      expect(storageService.saveAccount).not.toHaveBeenCalled()
     })
 
     it('should return error if transaction not found', async () => {

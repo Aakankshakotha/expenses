@@ -51,13 +51,12 @@ export function parseCurrency(currencyString: string): number | null {
   // Remove currency symbols, commas, and spaces
   const cleaned = currencyString.replace(/[₹$,\s]/g, '')
 
-  // Try to parse as number
-  const parsed = parseFloat(cleaned)
-
-  // Return null if not a valid number
-  if (isNaN(parsed)) {
+  // Reject anything that isn't entirely a number ("12abc" must not become 12)
+  if (!/^-?(\d+\.?\d*|\.\d+)$/.test(cleaned)) {
     return null
   }
+
+  const parsed = parseFloat(cleaned)
 
   // Convert to cents
   return dollarsToCents(parsed)

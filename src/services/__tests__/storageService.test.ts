@@ -457,6 +457,50 @@ describe('StorageService', () => {
     })
   })
 
+  describe('Budget and Category Operations', () => {
+    it('persists and deletes budgets and custom categories', async () => {
+      const budget = {
+        id: 'budget-1',
+        category: 'food',
+        amount: 25000,
+        period: 'monthly' as const,
+        startDate: '2026-02-01',
+        createdAt: '2026-02-01T00:00:00.000Z',
+        updatedAt: '2026-02-01T00:00:00.000Z',
+      }
+      const category = {
+        id: 'custom-food',
+        name: 'Coffee',
+        group: 'food' as const,
+        color: '#663399',
+        isCustom: true,
+      }
+
+      expect((await storageService.saveBudget(budget)).success).toBe(true)
+      expect((await storageService.saveCategory(category)).success).toBe(true)
+      expect(await storageService.getBudgets()).toMatchObject({
+        success: true,
+        data: [budget],
+      })
+      expect(await storageService.getCategories()).toMatchObject({
+        success: true,
+        data: [category],
+      })
+
+      await storageService.deleteBudget(budget.id)
+      await storageService.deleteCategory(category.id)
+
+      expect(await storageService.getBudgets()).toMatchObject({
+        success: true,
+        data: [],
+      })
+      expect(await storageService.getCategories()).toMatchObject({
+        success: true,
+        data: [],
+      })
+    })
+  })
+
   describe('Bulk Operations', () => {
     describe('exportData', () => {
       it('exports all data successfully', async () => {
@@ -546,7 +590,9 @@ describe('StorageService', () => {
         }
 
         const result = await storageService.importData(
-          invalidData as unknown as Parameters<typeof storageService.importData>[0]
+          invalidData as unknown as Parameters<
+            typeof storageService.importData
+          >[0]
         )
 
         expect(result.success).toBe(false)
@@ -598,6 +644,108 @@ describe('StorageService', () => {
       })
     })
 
+    describe('backup round trip', () => {
+      const account = {
+        id: '550e8400-e29b-41d4-a716-446655440000',
+        name: 'Bank',
+        type: 'asset' as const,
+        balance: 100000,
+        status: 'active' as const,
+        createdAt: '2026-02-17T10:00:00.000Z',
+        updatedAt: '2026-02-17T10:00:00.000Z',
+      }
+      const budget = {
+        id: 'budget-1',
+        category: 'food',
+        amount: 500000,
+        period: 'monthly' as const,
+        startDate: '2026-11-01',
+        createdAt: '2026-11-01T00:00:00.000Z',
+        updatedAt: '2026-11-01T00:00:00.000Z',
+      }
+      const category = {
+        id: 'custom-pets',
+        name: 'Pets',
+        group: 'personal' as const,
+        color: '#888888',
+        isCustom: true,
+      }
+
+      it('exports and restores budgets and custom categories', async () => {
+        await storageService.saveAccount(account)
+        await storageService.saveBudget(budget)
+        await storageService.saveCategory(category)
+
+        const exported = await storageService.exportData()
+        expect(exported.success).toBe(true)
+        if (!exported.success) return
+
+        await storageService.clearAllData()
+        const result = await storageService.importData(exported.data)
+        expect(result.success).toBe(true)
+
+        const budgets = await storageService.getBudgets()
+        const categories = await storageService.getCategories()
+        expect(budgets.success && budgets.data).toEqual([budget])
+        expect(categories.success && categories.data).toEqual([category])
+      })
+
+      it('still imports older backups that have no budgets or categories', async () => {
+        const result = await storageService.importData({
+          version: '1.0.0',
+          exportedAt: '2026-02-17T10:00:00.000Z',
+          accounts: [account],
+          transactions: [],
+          recurring: [],
+          netWorthSnapshots: [],
+        })
+        expect(result.success).toBe(true)
+      })
+
+      it('keeps existing data when writing the import fails partway', async () => {
+        await storageService.saveAccount({ ...account, name: 'Existing' })
+        const before = { ...mockLocalStorage }
+
+        // Accounts get written, then the disk is full on the next write
+        let failed = false
+        vi.mocked(localStorage.setItem).mockImplementation((key, value) => {
+          if (key === 'moneyflow_recurring' && !failed) {
+            failed = true
+            throw new Error('QuotaExceededError')
+          }
+          mockLocalStorage[key] = value
+        })
+
+        const result = await storageService.importData({
+          version: '1.0.0',
+          exportedAt: '2026-02-17T10:00:00.000Z',
+          accounts: [{ ...account, name: 'From backup' }],
+          transactions: [],
+          recurring: [],
+          netWorthSnapshots: [],
+        })
+
+        expect(result.success).toBe(false)
+        vi.mocked(localStorage.setItem).mockImplementation((key, value) => {
+          mockLocalStorage[key] = value
+        })
+        expect(mockLocalStorage).toEqual(before)
+      })
+
+      it('rejects a backup with a budget amount that is not whole paise', async () => {
+        const result = await storageService.importData({
+          version: '1.0.0',
+          exportedAt: '2026-02-17T10:00:00.000Z',
+          accounts: [],
+          transactions: [],
+          recurring: [],
+          netWorthSnapshots: [],
+          budgets: [{ ...budget, amount: 5000.5 }],
+        })
+        expect(result.success).toBe(false)
+      })
+    })
+
     describe('clearAllData', () => {
       it('clears all stored data', async () => {
         const account: Account = {
@@ -622,6 +770,160 @@ describe('StorageService', () => {
           expect(accountsResult.data).toEqual([])
         }
       })
+    })
+  })
+
+  describe('Derived balances', () => {
+    const now = '2026-11-01T00:00:00.000Z'
+    const makeAccount = (
+      type: Account['type'],
+      balance: number,
+      name: string
+    ): Account => ({
+      id: crypto.randomUUID(),
+      name,
+      type,
+      balance,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+    const makeTxn = (
+      from: Account,
+      to: Account,
+      amount: number,
+      date = '2026-11-05'
+    ): Transaction => ({
+      id: crypto.randomUUID(),
+      fromAccountId: from.id,
+      toAccountId: to.id,
+      amount,
+      description: 'Test',
+      date,
+      createdAt: now,
+    })
+    const balanceOf = async (id: string) => {
+      const result = await storageService.getAccount(id)
+      if (!result.success) throw new Error('account missing')
+      return result.data.balance
+    }
+
+    it('card purchase raises the amount owed; paying the bill lowers it', async () => {
+      const bank = makeAccount('asset', 1000000, 'Bank')
+      const card = makeAccount('liability', 500000, 'Card') // owes ₹5,000
+      const food = makeAccount('expense', 0, 'Food')
+      for (const a of [bank, card, food]) await storageService.saveAccount(a)
+
+      await storageService.saveTransaction(makeTxn(card, food, 100000))
+      expect(await balanceOf(card.id)).toBe(600000)
+      expect(await balanceOf(food.id)).toBe(100000)
+
+      await storageService.saveTransaction(makeTxn(bank, card, 600000))
+      expect(await balanceOf(card.id)).toBe(0)
+      expect(await balanceOf(bank.id)).toBe(400000)
+    })
+
+    it('deleting a transaction restores both balances exactly', async () => {
+      const bank = makeAccount('asset', 1000000, 'Bank')
+      const food = makeAccount('expense', 0, 'Food')
+      await storageService.saveAccount(bank)
+      await storageService.saveAccount(food)
+      const txn = makeTxn(bank, food, 12345)
+
+      await storageService.saveTransaction(txn)
+      await storageService.deleteTransaction(txn.id)
+
+      expect(await balanceOf(bank.id)).toBe(1000000)
+      expect(await balanceOf(food.id)).toBe(0)
+    })
+
+    it('setting a balance by hand sticks, with transactions already present', async () => {
+      const bank = makeAccount('asset', 1000000, 'Bank')
+      const food = makeAccount('expense', 0, 'Food')
+      await storageService.saveAccount(bank)
+      await storageService.saveAccount(food)
+      await storageService.saveTransaction(makeTxn(bank, food, 250000))
+
+      await storageService.saveAccount({ ...bank, balance: 777700 })
+
+      expect(await balanceOf(bank.id)).toBe(777700)
+      expect(await balanceOf(food.id)).toBe(250000)
+    })
+
+    it('moving a transaction to another month does not count it twice', async () => {
+      const bank = makeAccount('asset', 1000000, 'Bank')
+      const food = makeAccount('expense', 0, 'Food')
+      await storageService.saveAccount(bank)
+      await storageService.saveAccount(food)
+      const txn = makeTxn(bank, food, 100000, '2026-10-31')
+      await storageService.saveTransaction(txn)
+
+      await storageService.saveTransaction({ ...txn, date: '2026-11-01' })
+
+      const all = await storageService.getTransactions()
+      expect(all.success && all.data.map((t) => t.date)).toEqual(['2026-11-01'])
+      expect(await balanceOf(bank.id)).toBe(900000)
+    })
+
+    it('converts running-balance records without changing any balance', async () => {
+      const bank = makeAccount('asset', 900000, 'Bank') // already net of the txn
+      const food = makeAccount('expense', 100000, 'Food')
+      // Pre-migration layout: accounts hold a running balance
+      mockLocalStorage['moneyflow_accounts'] = JSON.stringify({
+        version: '1.0.0',
+        data: [bank, food],
+      })
+      mockLocalStorage['moneyflow_transactions_2026_11'] = JSON.stringify({
+        version: '1.0.0',
+        data: [makeTxn(bank, food, 100000)],
+      })
+
+      expect(await balanceOf(bank.id)).toBe(900000)
+      expect(await balanceOf(food.id)).toBe(100000)
+
+      const stored = JSON.parse(mockLocalStorage['moneyflow_accounts']).data
+      expect(stored[0]).toMatchObject({ id: bank.id, openingBalance: 1000000 })
+      expect(stored[0]).not.toHaveProperty('balance')
+    })
+
+    it('converts before the first write, so a new transaction counts once', async () => {
+      const bank = makeAccount('asset', 900000, 'Bank')
+      const food = makeAccount('expense', 100000, 'Food')
+      mockLocalStorage['moneyflow_accounts'] = JSON.stringify({
+        version: '1.0.0',
+        data: [bank, food],
+      })
+      mockLocalStorage['moneyflow_transactions_2026_11'] = JSON.stringify({
+        version: '1.0.0',
+        data: [makeTxn(bank, food, 100000)],
+      })
+
+      await storageService.saveTransaction(makeTxn(bank, food, 50000))
+
+      expect(await balanceOf(bank.id)).toBe(850000)
+      expect(await balanceOf(food.id)).toBe(150000)
+    })
+
+    it('restoring a backup reproduces its balances', async () => {
+      const bank = makeAccount('asset', 900000, 'Bank')
+      const food = makeAccount('expense', 100000, 'Food')
+      const result = await storageService.importData({
+        version: '1.0.0',
+        exportedAt: now,
+        accounts: [bank, food],
+        transactions: [makeTxn(bank, food, 100000)],
+        recurring: [],
+        netWorthSnapshots: [],
+      })
+      expect(result.success).toBe(true)
+
+      expect(await balanceOf(bank.id)).toBe(900000)
+      expect(await balanceOf(food.id)).toBe(100000)
+
+      const exported = await storageService.exportData()
+      expect(
+        exported.success && exported.data.accounts.map((a) => a.balance)
+      ).toEqual([900000, 100000])
     })
   })
 

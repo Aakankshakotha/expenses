@@ -333,7 +333,7 @@ export const categoryService = {
   },
 }
 
-// ── User-defined category CRUD (async, stored in Drive) ───────────────────────
+// ── User-defined category CRUD (async, stored in localStorage) ────────────────
 
 function uuid(): string {
   return crypto.randomUUID()
